@@ -1,0 +1,227 @@
+// ============================================================
+// ARSIP DIGITAL NTT — Prisma Schema
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USER & ROLE ─────────────────────────────────────────────
+// Role:
+//   super_admin     → Emi & Yuli (akses penuh semua fitur)
+//   admin_unit      → 6 org, upload arsip per unit masing-masing
+//   pimpinan        → lihat laporan
+//   staff           → lihat arsip & laporan
+//   dinas_arsip     → keputusan akhir pemusnahan
+
+model User {
+  id          Int      @id @default(autoincrement())
+  username    String   @unique
+  namaLengkap String
+  email       String   @unique
+  password    String
+  role        Role     @default(staff)
+  unitId      Int?
+  status      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  unit              Unit?              @relation(fields: [unitId], references: [id])
+  archives          Archive[]
+  penilaianDibuat   PenilaianArsip[]   @relation("PenilaianDibuat")
+  penilaianDisetujui PenilaianArsip[]  @relation("PenilaianDisetujui")
+  notifikasi        Notifikasi[]
+}
+
+enum Role {
+  super_admin
+  admin_unit
+  pimpinan
+  staff
+  dinas_arsip
+}
+
+// ─── UNIT ────────────────────────────────────────────────────
+// 3 unit utama, masing-masing 2 admin
+
+model Unit {
+  id        Int     @id @default(autoincrement())
+  kodeUnit  String  @unique
+  namaUnit  String
+  deskripsi String?
+
+  users    User[]
+  archives Archive[]
+}
+
+// ─── URUSAN (klasifikasi nomor surat) ────────────────────────
+// Setiap nomor surat masuk otomatis ke urusan yg sesuai
+// Contoh: nomor 300-xxx → Pengadaan, 800-xxx → Kepegawaian
+
+model Urusan {
+  id          Int     @id @default(autoincrement())
+  kodeUrusan  String  @unique   // contoh: "800", "300"
+  namaUrusan  String             // contoh: "Kepegawaian", "Pengadaan"
+  deskripsi   String?
+  keywords    String[]           // kata kunci: ["mutasi", "jabatan", "pegawai"]
+
+  archives Archive[]
+}
+
+// ─── CATEGORY ────────────────────────────────────────────────
+
+model Category {
+  id        Int     @id @default(autoincrement())
+  nama      String  @unique
+  deskripsi String?
+
+  archives Archive[]
+}
+
+// ─── ARCHIVE ─────────────────────────────────────────────────
+
+model Archive {
+  id           Int           @id @default(autoincrement())
+  nomorSurat   String
+  judul        String
+  tanggalSurat DateTime
+  pengirim     String
+  penerima     String
+  perihal      String
+  filePath     String
+
+  // Klasifikasi
+  kategoriId   Int
+  unitId       Int
+  urusanId     Int?
+  createdBy    Int
+
+  // Status & retensi
+  statusArsip  StatusArsip  @default(aktif)
+  masaRetensi  Int          // dalam bulan
+  tanggalMulaiRetensi DateTime @default(now())
+  tanggalKadaluarsa   DateTime?  // dihitung otomatis
+  keteranganInaktif   String?    // alasan jika inaktif/dinamis
+
+  // Peraturan pengganti (wajib ada sebelum musnahkan)
+  nomorPeraturanPengganti String?
+  judulPeraturanPengganti String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category     Category       @relation(fields: [kategoriId], references: [id])
+  unit         Unit           @relation(fields: [unitId], references: [id])
+  urusan       Urusan?        @relation(fields: [urusanId], references: [id])
+  user         User           @relation(fields: [createdBy], references: [id])
+  penilaian    PenilaianArsip[]
+  notifikasi   Notifikasi[]
+}
+
+enum StatusArsip {
+  aktif
+  inaktif
+  dinamis      // arsip dinamis — tidak boleh dimusnahkan sembarangan
+  dimusnahkan
+}
+
+// ─── PENILAIAN ARSIP ─────────────────────────────────────────
+// Alur: admin/staff → kepala bagian → kepala biro → dinas arsip
+
+model PenilaianArsip {
+  id          Int              @id @default(autoincrement())
+  archiveId   Int
+  dibuatOleh  Int
+  status      StatusPenilaian  @default(menunggu_kepala_bagian)
+
+  // Usulan
+  usulanTindakan TindakanArsip
+  alasanUsulan   String
+
+  // Penilaian kepala bagian
+  nilaiKepalaBagian   String?
+  catatanKepalaBagian String?
+  disetujuiKepalaBagianId  Int?
+  tanggalKepalaBagian DateTime?
+
+  // Penilaian kepala biro
+  nilaiKepalaBiro   String?
+  catatanKepalaBiro String?
+  disetujuiKepalaBiroId  Int?
+  tanggalKepalaBiro DateTime?
+
+  // Keputusan dinas arsip
+  keputusanDinas   String?
+  catatanDinas     String?
+  disetujuiDinasId Int?
+  tanggalDinas     DateTime?
+
+  // Keputusan akhir
+  tindakanAkhir  TindakanArsip?
+  tanggalSelesai DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  archive         Archive @relation(fields: [archiveId], references: [id])
+  pembuatPenilaian User   @relation("PenilaianDibuat", fields: [dibuatOleh], references: [id])
+  penyetujuPenilaian User? @relation("PenilaianDisetujui", fields: [disetujuiDinasId], references: [id])
+}
+
+enum StatusPenilaian {
+  menunggu_kepala_bagian
+  menunggu_kepala_biro
+  menunggu_dinas_arsip
+  selesai
+  ditolak
+}
+
+enum TindakanArsip {
+  hapus
+  inaktif
+  dinamis
+  pertahankan
+}
+
+// ─── NOTIFIKASI ──────────────────────────────────────────────
+// Notif masa retensi hampir habis, penilaian perlu ditindaklanjuti
+
+model Notifikasi {
+  id          Int              @id @default(autoincrement())
+  userId      Int
+  archiveId   Int?
+  judul       String
+  pesan       String
+  tipe        TipeNotifikasi
+  sudahDibaca Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  user    User     @relation(fields: [userId], references: [id])
+  archive Archive? @relation(fields: [archiveId], references: [id])
+}
+
+enum TipeNotifikasi {
+  retensi_hampir_habis   // 30 hari sebelum kadaluarsa
+  retensi_habis          // sudah lewat masa retensi
+  penilaian_baru         // ada usulan penilaian baru
+  penilaian_perlu_aksi   // giliran anda menilai
+  arsip_dimusnahkan
+}
+
+// ─── LAPORAN (view/summary) ───────────────────────────────────
+// Tabel audit log untuk lacak semua perubahan penting
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  aksi       String   // "upload", "hapus", "ubah_status", "nilai_arsip"
+  tabel      String   // "Archive", "PenilaianArsip"
+  recordId   Int
+  detailLama String?  // JSON sebelum
+  detailBaru String?  // JSON sesudah
+  createdAt  DateTime @default(now())
+}
