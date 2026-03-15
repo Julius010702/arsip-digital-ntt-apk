@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import AsyncStorage from '@react-native-async-storage/async-storage' // ✅ BARU
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useAuth } from '../hooks/useAuth'
@@ -37,6 +38,19 @@ export default function ProfilScreen() {
   const [loggingOut, setLoggingOut] = useState(false)
   const isSuperAdmin = user?.role === 'super_admin'
   const [avatarUri, setAvatarUri] = useState<string | null>(null)
+
+  // ✅ Load avatar permanen dari AsyncStorage saat buka screen
+  useEffect(() => {
+    const loadAvatar = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(`avatar_${user?.id}`)
+        if (saved) setAvatarUri(saved)
+      } catch (e) {
+        console.error('Gagal load avatar:', e)
+      }
+    }
+    if (user?.id) loadAvatar()
+  }, [user?.id])
 
   // Modals
   const [showChangePassword, setShowChangePassword] = useState(false)
@@ -139,20 +153,29 @@ export default function ProfilScreen() {
     ])
   }
 
+  // ✅ Simpan avatar permanen ke AsyncStorage
   async function handlePickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') {
       Alert.alert('Izin Diperlukan', 'Izinkan akses galeri untuk mengubah foto profil'); return
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'] as any, // ✅ FIXED: kompatibel semua versi
+      mediaTypes: ['images'] as any,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
     })
     if (!result.canceled && result.assets[0]) {
-      setAvatarUri(result.assets[0].uri)
-      Alert.alert('Berhasil ✅', 'Foto profil berhasil diperbarui')
+      const uri = result.assets[0].uri
+      setAvatarUri(uri)
+      try {
+        // Simpan permanen — key unik per user
+        await AsyncStorage.setItem(`avatar_${user?.id}`, uri)
+        Alert.alert('Berhasil ✅', 'Foto profil berhasil diperbarui')
+      } catch (e) {
+        console.error('Gagal simpan avatar:', e)
+        Alert.alert('Peringatan', 'Foto berhasil dipilih tapi gagal disimpan permanen')
+      }
     }
   }
 
@@ -198,9 +221,9 @@ export default function ProfilScreen() {
           <Text style={styles.sectionTitle}>Informasi Akun</Text>
         </View>
         {[
-          { label: 'Username', value: user?.username,                      icon: 'at-outline' },
-          { label: 'Email',    value: user?.email,                         icon: 'mail-outline' },
-          { label: 'Role',     value: ROLE_LABEL[user?.role ?? ''],        icon: 'ribbon-outline' },
+          { label: 'Username', value: user?.username,                       icon: 'at-outline' },
+          { label: 'Email',    value: user?.email,                          icon: 'mail-outline' },
+          { label: 'Role',     value: ROLE_LABEL[user?.role ?? ''],         icon: 'ribbon-outline' },
           { label: 'Unit',     value: user?.unit?.namaUnit ?? 'Semua Unit', icon: 'business-outline' },
           { label: 'Status',   value: user?.status ? 'Aktif' : 'Nonaktif', icon: 'pulse-outline' },
         ].map(({ label, value, icon }) => (
@@ -292,7 +315,6 @@ export default function ProfilScreen() {
             <Ionicons name="chevron-forward" size={16} color={COLORS.danger} />
           </TouchableOpacity>
 
-          {/* ✅ BARU: Manajemen Urusan */}
           <TouchableOpacity
             style={[styles.menuRow, { borderColor: '#F59E0B30', borderWidth: 1, borderRadius: RADIUS.md, marginTop: 8 }]}
             onPress={() => navigation.navigate('UrusanManajemen')}
@@ -358,8 +380,8 @@ export default function ProfilScreen() {
               </TouchableOpacity>
             </View>
 
-            <PasswordField label="Password Lama" value={oldPassword} onChangeText={setOldPassword} show={showOld} onToggle={() => setShowOld(!showOld)} />
-            <PasswordField label="Password Baru" value={newPassword} onChangeText={setNewPassword} show={showNew} onToggle={() => setShowNew(!showNew)} />
+            <PasswordField label="Password Lama"      value={oldPassword} onChangeText={setOldPassword} show={showOld}     onToggle={() => setShowOld(!showOld)} />
+            <PasswordField label="Password Baru"      value={newPassword} onChangeText={setNewPassword} show={showNew}     onToggle={() => setShowNew(!showNew)} />
             <PasswordField label="Konfirmasi Password" value={confirmPass} onChangeText={setConfirmPass} show={showConfirm} onToggle={() => setShowConfirm(!showConfirm)} />
 
             {newPassword.length > 0 && newPassword !== confirmPass && (
@@ -591,6 +613,6 @@ const styles = StyleSheet.create({
   userDeleteBtn:  { width: 32, height: 32, borderRadius: 8, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
 
   // Selected user
-  selectedUserBox:{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface, padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md },
+  selectedUserBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface, padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md },
   selectedUserName:{ fontSize: 14, fontWeight: '700', color: COLORS.text },
 })
