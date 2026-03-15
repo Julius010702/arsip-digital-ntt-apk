@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Alert, Linking, Modal, TextInput,
+  ActivityIndicator, Alert, Modal, TextInput,
 } from 'react-native'
+import { downloadAsync, documentDirectory } from "expo-file-system"
+import * as Sharing from "expo-sharing"
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -79,6 +81,28 @@ export default function DetailArsipScreen() {
     } catch (e: any) {
       Alert.alert('Gagal', e.message)
     } finally { setSaving(false) }
+  }
+
+  async function handleDownload() {
+    if (!fileUrl) return
+    try {
+      Alert.alert('Mengunduh...', 'File sedang diunduh, harap tunggu...')
+      const fileName2 = fileUrl.split('/').pop()?.split('?')[0] ?? 'dokumen.pdf'
+      const destUri = (documentDirectory ?? '') + fileName2
+      const downloadRes = await downloadAsync(fileUrl, destUri)
+      const canShare = await Sharing.isAvailableAsync()
+      if (canShare) {
+        await Sharing.shareAsync(downloadRes.uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Simpan atau Buka File',
+          UTI: 'com.adobe.pdf',
+        })
+      } else {
+        Alert.alert('Berhasil', 'File tersimpan di: ' + downloadRes.uri)
+      }
+    } catch (e: any) {
+      Alert.alert('Gagal mengunduh', e.message)
+    }
   }
 
   async function handleDelete() {
@@ -188,7 +212,7 @@ export default function DetailArsipScreen() {
       <View style={[s.bottomBar, { paddingBottom: insets.bottom + SPACING.md }]}>
         <TouchableOpacity
           style={[s.btnUnduh, !fileUrl && { opacity: 0.4 }]}
-          onPress={() => fileUrl && Linking.openURL(fileUrl)}
+          onPress={handleDownload}
           disabled={!fileUrl}
         >
           <Ionicons name="download-outline" size={18} color={COLORS.primaryLight} />
