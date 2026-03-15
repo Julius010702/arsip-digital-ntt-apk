@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Alert, Linking,
+  ActivityIndicator, Alert, Linking, Platform,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { archiveApi } from '../services/api'
 import { Archive } from '../types'
 import { COLORS, CAT_COLORS, RADIUS, SHADOW, SPACING } from '../utils/theme'
@@ -15,16 +16,18 @@ import { RootStackParams } from '../navigation/types'
 
 type Route = RouteProp<RootStackParams, 'DetailArsip'>
 
-const BASE = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3000'
+const BASE = 'https://arsip-digital-ntt-apk.vercel.app'
 
 export default function DetailArsipScreen() {
   const { user } = useAuth()
-  const nav   = useNavigation()
-  const route = useRoute<Route>()
+  const nav    = useNavigation()
+  const route  = useRoute<Route>()
+  const insets = useSafeAreaInsets()
+
   const [archive, setArchive] = useState<Archive | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const canEdit = ['super_admin', 'admin'].includes(user?.role ?? '')
+  const canEdit = ['super_admin', 'admin_unit'].includes(user?.role ?? '')
 
   useEffect(() => { load() }, [])
 
@@ -52,7 +55,11 @@ export default function DetailArsipScreen() {
     ])
   }
 
-  if (loading) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" color={COLORS.primaryLight} /></View>
+  if (loading) return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator size="large" color={COLORS.primaryLight} />
+    </View>
+  )
   if (!archive) return null
 
   const catColor = CAT_COLORS[archive.category?.nama ?? ''] ?? COLORS.info
@@ -61,8 +68,10 @@ export default function DetailArsipScreen() {
 
   return (
     <View style={s.root}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      >
         {/* HERO */}
         <View style={s.hero}>
           <View style={[s.heroIcon, { backgroundColor: catColor + '22' }]}>
@@ -106,12 +115,10 @@ export default function DetailArsipScreen() {
             </View>
           </TouchableOpacity>
         </View>
-
-        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* BOTTOM BAR */}
-      <View style={s.bottomBar}>
+      {/* BOTTOM BAR — dengan safe area padding */}
+      <View style={[s.bottomBar, { paddingBottom: insets.bottom + SPACING.md }]}>
         <TouchableOpacity style={s.btnUnduh} onPress={() => Linking.openURL(fileUrl)}>
           <Ionicons name="download-outline" size={18} color={COLORS.primaryLight} />
           <Text style={s.btnUnduhText}>Unduh File</Text>
@@ -142,7 +149,7 @@ const s = StyleSheet.create({
 
   card: {
     backgroundColor: COLORS.white, borderRadius: RADIUS.lg,
-    padding: SPACING.lg, margin: SPACING.lg, marginBottom: 0,
+    padding: SPACING.lg, margin: SPACING.lg, marginBottom: SPACING.md,
     borderWidth: 1, borderColor: COLORS.border, ...SHADOW.sm,
   },
   cardTitle: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 16 },
@@ -158,8 +165,11 @@ const s = StyleSheet.create({
   dlBtn:    { width: 36, height: 36, backgroundColor: COLORS.primarySoft, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
 
   bottomBar: {
-    flexDirection: 'row', gap: 10, padding: SPACING.lg,
-    backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border,
+    flexDirection: 'row', gap: 10,
+    paddingTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
   },
   btnUnduh: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

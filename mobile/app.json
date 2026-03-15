@@ -1,6 +1,25 @@
 {
-  "plugins": [
-    "expo-asset",
-    "expo-font"
-  ]
+  "expo": {
+    "name": "Arsip Digital NTT",
+    "slug": "arsip-digital-ntt",
+    "version": "1.0.0",
+    "icon": "./assets/images/icon.png",
+    "owner": "julius_djami",
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ],
+    "android": {
+      "package": "com.julius_djami.arsipdigitalntt",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f78aa622-5caf-47b6-99cd-411cfee1c605"
+      }
+    }
+  }
 }

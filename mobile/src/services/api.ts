@@ -4,25 +4,23 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-const BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api'
+const BASE = 'https://arsip-digital-ntt-apk.vercel.app/api'
 
 async function req<T>(
   method: string,
   path: string,
   body?: any,
-  isFormData = false
 ): Promise<T> {
   const token = await AsyncStorage.getItem('token')
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
   if (token) headers['Authorization'] = `Bearer ${token}`
-  if (!isFormData) headers['Content-Type'] = 'application/json'
 
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
-    body: body
-      ? isFormData ? body : JSON.stringify(body)
-      : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   })
 
   const data = await res.json()
@@ -49,7 +47,7 @@ export const archiveApi = {
     return req<any>('GET', `/archives${q ? `?${q}` : ''}`)
   },
   get:    (id: number) => req<any>('GET', `/archives/${id}`),
-  create: (form: FormData) => req<any>('POST', '/archives', form, true),
+  create: (body: any) => req<any>('POST', '/archives', body),
   update: (id: number, body: any) => req<any>('PUT', `/archives/${id}`, body),
   delete: (id: number) => req<any>('DELETE', `/archives/${id}`),
 }
