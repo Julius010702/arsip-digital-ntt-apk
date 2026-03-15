@@ -234,21 +234,49 @@ export default function DetailArsipScreen() {
           ))}
         </View>
 
-        {/* ══ INFORMASI DOKUMEN ══ */}
+        {/* ══ INFORMASI DOKUMEN — 4 kolom x 2 baris ══ */}
         <Block title="Informasi Dokumen" icon="document-text-outline" iconColor="#3B82F6" iconBg="#EFF6FF">
-          <InfoRow icon="barcode-outline"    color="#3B82F6" label="Nomor Surat"   value={archive.nomorSurat} />
-          <InfoRow icon="calendar-outline"   color="#8B5CF6" label="Tgl. Surat"   value={formatDate(archive.tanggalSurat)} />
-          <InfoRow icon="person-outline"     color="#F59E0B" label="Pengirim"      value={archive.pengirim} />
-          <InfoRow icon="people-outline"     color="#10B981" label="Penerima"      value={archive.penerima} />
-          <InfoRow icon="chatbubble-outline" color="#EF4444" label="Perihal"       value={archive.perihal} />
-          <InfoRow icon="business-outline"   color="#06B6D4" label="Unit Kerja"    value={archive.unit?.namaUnit} />
-          <InfoRow icon="hourglass-outline"  color="#F97316" label="Masa Retensi"  value={`${archive.masaRetensi} bulan`} last />
+          <View style={s.infoGrid}>
+            <GridCell icon="barcode-outline"    color="#3B82F6" label="Nomor Surat"  value={archive.nomorSurat} />
+            <GridCell icon="calendar-outline"   color="#8B5CF6" label="Tgl. Surat"  value={formatDate(archive.tanggalSurat)} />
+            <GridCell icon="person-outline"     color="#F59E0B" label="Pengirim"    value={archive.pengirim} />
+            <GridCell icon="people-outline"     color="#10B981" label="Penerima"    value={archive.penerima} />
+            <GridCell icon="chatbubble-outline" color="#EF4444" label="Perihal"     value={archive.perihal} />
+            <GridCell icon="business-outline"   color="#06B6D4" label="Unit Kerja"  value={archive.unit?.namaUnit} />
+            <GridCell icon="hourglass-outline"  color="#F97316" label="Retensi"     value={`${archive.masaRetensi} bln`} />
+            <GridCell icon="ribbon-outline"     color="#EC4899" label="Kategori"    value={archive.category?.nama} />
+          </View>
         </Block>
 
-        {/* ══ RIWAYAT UPLOAD ══ */}
+        {/* ══ RIWAYAT UPLOAD — 1 baris 3 kolom ══ */}
         <Block title="Riwayat Upload" icon="cloud-upload-outline" iconColor="#8B5CF6" iconBg="#EDE9FE">
-          <InfoRow icon="person-circle-outline" color="#8B5CF6" label="Diunggah oleh"  value={archive.user?.namaLengkap} />
-          <InfoRow icon="calendar-outline"      color="#3B82F6" label="Tanggal Upload" value={formatDate(archive.createdAt)} last />
+          <View style={s.riwayatStrip}>
+            <View style={s.riwayatItem}>
+              <View style={[s.riwayatIconBox, { backgroundColor: '#8B5CF6' + '15' }]}>
+                <Ionicons name="person-circle-outline" size={18} color="#8B5CF6" />
+              </View>
+              <Text style={s.riwayatLbl}>Diunggah Oleh</Text>
+              <Text style={s.riwayatVal} numberOfLines={2}>{archive.user?.namaLengkap ?? '—'}</Text>
+            </View>
+            <View style={s.riwayatDivider} />
+            <View style={s.riwayatItem}>
+              <View style={[s.riwayatIconBox, { backgroundColor: '#3B82F6' + '15' }]}>
+                <Ionicons name="calendar-outline" size={18} color="#3B82F6" />
+              </View>
+              <Text style={s.riwayatLbl}>Tanggal Upload</Text>
+              <Text style={s.riwayatVal}>{formatDate(archive.createdAt)}</Text>
+            </View>
+            <View style={s.riwayatDivider} />
+            <View style={s.riwayatItem}>
+              <View style={[s.riwayatIconBox, { backgroundColor: '#10B981' + '15' }]}>
+                <Ionicons name="shield-checkmark-outline" size={18} color="#10B981" />
+              </View>
+              <Text style={s.riwayatLbl}>Status</Text>
+              <Text style={[s.riwayatVal, { color: archive.statusArsip === 'aktif' ? '#10B981' : '#F59E0B', fontWeight: '800' }]}>
+                {archive.statusArsip?.toUpperCase() ?? 'AKTIF'}
+              </Text>
+            </View>
+          </View>
         </Block>
 
         {/* ══ FILE DOKUMEN ══ */}
@@ -473,6 +501,21 @@ function EditField({ label, value, onChangeText, multiline, keyboardType, icon, 
   )
 }
 
+// ─── GRID CELL COMPONENT ─────────────────────────────
+function GridCell({ icon, color, label, value }: {
+  icon: any; color: string; label: string; value?: string
+}) {
+  return (
+    <View style={s.gridCell}>
+      <View style={[s.gridCellIcon, { backgroundColor: color + '15' }]}>
+        <Ionicons name={icon} size={14} color={color} />
+      </View>
+      <Text style={s.gridCellLbl}>{label}</Text>
+      <Text style={s.gridCellVal} numberOfLines={2}>{value || '—'}</Text>
+    </View>
+  )
+}
+
 // ─── STYLES ──────────────────────────────────────────
 const s = StyleSheet.create({
   root:        { flex: 1, backgroundColor: '#F1F5F9' },
@@ -576,4 +619,19 @@ const s = StyleSheet.create({
   editInput:       { borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 13, paddingVertical: 10, fontSize: 13, color: '#1E293B', backgroundColor: '#F8FAFC' },
   editInputFocused:{ borderColor: '#3B82F6', backgroundColor: '#fff' },
   editMultiline:   { height: 80, textAlignVertical: 'top' },
+
+  // Info grid — 4 kolom x 2 baris
+  infoGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gridCell:     { width: '22.5%', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 4, gap: 5, borderWidth: 1, borderColor: '#F1F5F9' },
+  gridCellIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  gridCellLbl:  { fontSize: 9, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3, textAlign: 'center' },
+  gridCellVal:  { fontSize: 11, color: '#0F172A', fontWeight: '700', textAlign: 'center', lineHeight: 15 },
+
+  // Riwayat upload — 1 baris 3 kolom
+  riwayatStrip:   { flexDirection: 'row', alignItems: 'center' },
+  riwayatItem:    { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 4 },
+  riwayatDivider: { width: 1, height: 60, backgroundColor: '#F1F5F9' },
+  riwayatIconBox: { width: 36, height: 36, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  riwayatLbl:     { fontSize: 9, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' },
+  riwayatVal:     { fontSize: 12, color: '#0F172A', fontWeight: '700', textAlign: 'center', lineHeight: 16 },
 })
