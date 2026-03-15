@@ -22,12 +22,12 @@ type Nav = NativeStackNavigationProp<RootStackParams>
 const { width } = Dimensions.get('window')
 
 const QUICK_SEARCHES = [
-  { label: 'Kepegawaian', keyword: '800',        icon: 'people-outline',     color: '#3B82F6', bg: '#EFF6FF' },
-  { label: 'Pengadaan',   keyword: 'pengadaan',  icon: 'cart-outline',       color: '#10B981', bg: '#F0FDF4' },
-  { label: 'Keuangan',    keyword: 'keuangan',   icon: 'cash-outline',       color: '#F59E0B', bg: '#FFFBEB' },
-  { label: 'Surat Masuk', keyword: 'surat masuk',icon: 'mail-outline',       color: '#8B5CF6', bg: '#F5F3FF' },
-  { label: 'Laporan',     keyword: 'laporan',    icon: 'bar-chart-outline',  color: '#EF4444', bg: '#FEF2F2' },
-  { label: 'SK / SPK',    keyword: 'SK',         icon: 'document-outline',   color: '#06B6D4', bg: '#ECFEFF' },
+  { label: 'Kepegawaian', keyword: '800',         icon: 'people-outline',    color: '#3B82F6', bg: '#EFF6FF' },
+  { label: 'Pengadaan',   keyword: 'pengadaan',   icon: 'cart-outline',      color: '#10B981', bg: '#F0FDF4' },
+  { label: 'Keuangan',    keyword: 'keuangan',    icon: 'cash-outline',      color: '#F59E0B', bg: '#FFFBEB' },
+  { label: 'Surat Masuk', keyword: 'surat masuk', icon: 'mail-outline',      color: '#8B5CF6', bg: '#F5F3FF' },
+  { label: 'Laporan',     keyword: 'laporan',     icon: 'bar-chart-outline', color: '#EF4444', bg: '#FEF2F2' },
+  { label: 'SK / SPK',    keyword: 'SK',          icon: 'document-outline',  color: '#06B6D4', bg: '#ECFEFF' },
 ]
 
 const TIPS = [
@@ -58,10 +58,18 @@ export default function CariScreen() {
     fadeAnim.setValue(0)
     scaleAnim.setValue(0.95)
     try {
-      const det = await urusanApi.detect(q, q, q)
-      if (det.data?.sumber !== 'default') setDetected(det.data)
+      // ✅ Deteksi urusan dibungkus try-catch terpisah
+      // agar error dari backend tidak menghentikan pencarian
+      try {
+        const det = await urusanApi.detect(q, q, q)
+        if (det.data?.sumber !== 'default') setDetected(det.data)
+      } catch (_) {
+        // abaikan error deteksi urusan, lanjutkan pencarian
+      }
+
+      // Cari arsip utama
       const res = await archiveApi.list({ search: q, limit: 20 })
-      setResults(res.data ?? [])
+      setResults(res.data?.data ?? res.data ?? [])
       setSearched(true)
       Animated.parallel([
         Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
@@ -87,8 +95,8 @@ export default function CariScreen() {
     cari(keyword)
   }
 
-  const renderItem = ({ item, index }: { item: Archive; index: number }) => {
-    const s = STATUS_ARSIP[item.statusArsip] ?? STATUS_ARSIP.aktif
+  const renderItem = ({ item }: { item: Archive }) => {
+    const st = STATUS_ARSIP[item.statusArsip] ?? STATUS_ARSIP.aktif
     return (
       <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
         <TouchableOpacity
@@ -96,7 +104,6 @@ export default function CariScreen() {
           onPress={() => navigation.navigate('DetailArsip', { id: item.id })}
           activeOpacity={0.82}
         >
-          {/* Left doc icon */}
           <LinearGradient colors={['#EFF6FF', '#DBEAFE']} style={styles.cardDocIcon}>
             <Ionicons name="document-text" size={20} color="#3B82F6" />
           </LinearGradient>
@@ -107,9 +114,9 @@ export default function CariScreen() {
                 <Ionicons name="barcode-outline" size={10} color="#3B82F6" />
                 <Text style={styles.nomor}>{item.nomorSurat || 'Tanpa Nomor'}</Text>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: s.bg }]}>
-                <View style={[styles.statusDot, { backgroundColor: s.color }]} />
-                <Text style={[styles.statusText, { color: s.color }]}>{s.label}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
+                <View style={[styles.statusDot, { backgroundColor: st.color }]} />
+                <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
               </View>
             </View>
 
@@ -127,10 +134,12 @@ export default function CariScreen() {
               </View>
             </View>
 
-            {item.urusan && (
+            {(item as any).urusan && (
               <View style={styles.urusanBadge}>
-                <Ionicons name="pricetag-outline" size={10} color="#06B6D4" />
-                <Text style={styles.urusanText}>{item.urusan.kodeUrusan} · {item.urusan.namaUrusan}</Text>
+                <Ionicons name="pricetag-outline" size={10} color="#8B5CF6" />
+                <Text style={styles.urusanText}>
+                  {(item as any).urusan.kodeUrusan} · {(item as any).urusan.namaUrusan}
+                </Text>
               </View>
             )}
           </View>
@@ -149,7 +158,6 @@ export default function CariScreen() {
         <Text style={styles.headerTitle}>Cari Arsip</Text>
         <Text style={styles.headerSub}>Temukan arsip dengan cepat & akurat</Text>
 
-        {/* ── SEARCH BAR ── */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={18} color="#64748B" />
@@ -238,7 +246,7 @@ export default function CariScreen() {
         />
       )}
 
-      {/* ══ PANDUAN (saat belum search) ══ */}
+      {/* ══ PANDUAN ══ */}
       {!searched && !loading && (
         <FlatList
           showsVerticalScrollIndicator={false}
@@ -247,7 +255,6 @@ export default function CariScreen() {
           renderItem={null}
           ListHeaderComponent={
             <View>
-              {/* Quick search chips */}
               <View style={styles.quickSection}>
                 <View style={styles.quickHeader}>
                   <Ionicons name="flash-outline" size={15} color="#F59E0B" />
@@ -270,14 +277,13 @@ export default function CariScreen() {
                 </View>
               </View>
 
-              {/* Tips */}
               <View style={styles.tipsSection}>
                 <View style={styles.tipsHeader}>
                   <Ionicons name="bulb-outline" size={15} color="#8B5CF6" />
                   <Text style={styles.tipsTitle}>Tips Pencarian</Text>
                 </View>
                 {TIPS.map((tip, i) => (
-                  <View key={i} style={styles.tipRow}>
+                  <View key={i} style={[styles.tipRow, i === TIPS.length - 1 && { borderBottomWidth: 0 }]}>
                     <View style={[styles.tipIconBox, { backgroundColor: tip.color + '15' }]}>
                       <Ionicons name={tip.icon as any} size={13} color={tip.color} />
                     </View>
@@ -294,45 +300,38 @@ export default function CariScreen() {
   )
 }
 
-// ─── STYLES ──────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
 
-  // Header
   header:     { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20, overflow: 'hidden' },
   headerDec1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.04)', top: -70, right: -40 },
   headerDec2: { position: 'absolute', width: 120, height: 120, borderRadius: 60,  backgroundColor: 'rgba(255,255,255,0.04)', bottom: -20, left: 40 },
   headerTitle:{ color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
   headerSub:  { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 3, marginBottom: 16 },
 
-  // Search bar
   searchRow:   { flexDirection: 'row', gap: 10, alignItems: 'center' },
   searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1E293B', fontWeight: '500' },
   cariBtn:     { width: 46, height: 46, borderRadius: 14, overflow: 'hidden' },
   cariBtnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Deteksi
-  deteksiBox:      { paddingHorizontal: 16, paddingTop: 12 },
-  deteksiInner:    { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#FEF3C7' },
-  deteksiIconBox:  { width: 28, height: 28, borderRadius: 8, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
-  deteksiLabel:    { fontSize: 10, color: '#D97706', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
-  deteksiValue:    { fontSize: 13, color: '#92400E', fontWeight: '700', marginTop: 1 },
-  deteksiKeyword:  { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  deteksiBox:        { paddingHorizontal: 16, paddingTop: 12 },
+  deteksiInner:      { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#FEF3C7' },
+  deteksiIconBox:    { width: 28, height: 28, borderRadius: 8, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
+  deteksiLabel:      { fontSize: 10, color: '#D97706', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  deteksiValue:      { fontSize: 13, color: '#92400E', fontWeight: '700', marginTop: 1 },
+  deteksiKeyword:    { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   deteksiKeywordText:{ fontSize: 11, color: '#D97706', fontWeight: '700' },
 
-  // Loading
   loadingBox:  { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
 
-  // Result
   list:          { padding: 16, gap: 10, paddingBottom: 32 },
   resultHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   resultCountBox:{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   resultCount:   { fontSize: 12, color: '#15803D', fontWeight: '700' },
   resultQuery:   { fontSize: 12, color: '#94A3B8', fontStyle: 'italic' },
 
-  // Card
   card:        { backgroundColor: '#fff', borderRadius: 18, flexDirection: 'row', alignItems: 'flex-start', padding: 14, gap: 12, ...SHADOW.sm },
   cardDocIcon: { width: 46, height: 46, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   cardBody:    { flex: 1 },
@@ -346,10 +345,9 @@ const styles = StyleSheet.create({
   metaRow:     { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
   metaItem:    { flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: 110 },
   metaText:    { fontSize: 10, color: '#94A3B8', fontWeight: '500' },
-  urusanBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ECFEFF', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
-  urusanText:  { fontSize: 10, color: '#06B6D4', fontWeight: '700' },
+  urusanBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F5F3FF', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
+  urusanText:  { fontSize: 10, color: '#8B5CF6', fontWeight: '700' },
 
-  // Empty
   empty:          { alignItems: 'center', paddingTop: 50, gap: 12 },
   emptyIconBox:   { width: 88, height: 88, borderRadius: 44, justifyContent: 'center', alignItems: 'center' },
   emptyTitle:     { fontSize: 16, fontWeight: '800', color: '#1E293B' },
@@ -357,7 +355,6 @@ const styles = StyleSheet.create({
   emptyResetBtn:  { backgroundColor: '#EFF6FF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginTop: 4 },
   emptyResetText: { color: '#3B82F6', fontWeight: '700', fontSize: 13 },
 
-  // Quick searches
   quickSection: { backgroundColor: '#fff', margin: 16, marginBottom: 0, borderRadius: 20, padding: 18, ...SHADOW.sm },
   quickHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   quickTitle:   { fontSize: 14, fontWeight: '800', color: '#1E293B' },
@@ -366,7 +363,6 @@ const styles = StyleSheet.create({
   quickChipIcon:{ width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   quickChipText:{ fontSize: 12, fontWeight: '700' },
 
-  // Tips
   tipsSection: { backgroundColor: '#fff', margin: 16, marginTop: 12, borderRadius: 20, padding: 18, ...SHADOW.sm },
   tipsHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   tipsTitle:   { fontSize: 14, fontWeight: '800', color: '#1E293B' },

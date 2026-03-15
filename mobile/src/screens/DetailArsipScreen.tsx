@@ -1,7 +1,12 @@
-import React, { useEffect, useState } from 'react'
+// ======================================================
+// FILE: mobile/src/screens/DetailArsipScreen.tsx
+// ======================================================
+
+import React, { useEffect, useState, useRef } from 'react'
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Alert, Modal, TextInput, Animated, Dimensions,
+  ActivityIndicator, Alert, Modal, TextInput, Animated,
+  Dimensions, StatusBar,
 } from 'react-native'
 import * as Sharing from 'expo-sharing'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -22,44 +27,42 @@ type Route = RouteProp<RootStackParams, 'DetailArsip'>
 
 const { width } = Dimensions.get('window')
 
-// ─── STATUS CONFIG ────────────────────────────────────
-const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  aktif:    { bg: '#DCFCE7', text: '#15803D', dot: '#22C55E', label: 'AKTIF' },
-  inaktif:  { bg: '#FEF3C7', text: '#B45309', dot: '#F59E0B', label: 'INAKTIF' },
-  musnah:   { bg: '#FEE2E2', text: '#B91C1C', dot: '#EF4444', label: 'MUSNAH' },
-  permanen: { bg: '#EDE9FE', text: '#6D28D9', dot: '#8B5CF6', label: 'PERMANEN' },
+const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string; label: string; gradColors: [string,string] }> = {
+  aktif:    { bg: '#DCFCE7', text: '#15803D', dot: '#22C55E', label: 'AKTIF',    gradColors: ['#22C55E','#16A34A'] },
+  inaktif:  { bg: '#FEF3C7', text: '#B45309', dot: '#F59E0B', label: 'INAKTIF',  gradColors: ['#F59E0B','#D97706'] },
+  musnah:   { bg: '#FEE2E2', text: '#B91C1C', dot: '#EF4444', label: 'MUSNAH',   gradColors: ['#EF4444','#DC2626'] },
+  permanen: { bg: '#EDE9FE', text: '#6D28D9', dot: '#8B5CF6', label: 'PERMANEN', gradColors: ['#8B5CF6','#7C3AED'] },
 }
 
-// ─── EXT ICON CONFIG ──────────────────────────────────
 function getExtConfig(ext: string) {
   switch (ext.toLowerCase()) {
-    case 'pdf':  return { color: '#EF4444', bg: '#FEE2E2', icon: 'document-text' as const }
+    case 'pdf':  return { color: '#EF4444', bg: '#FEE2E2', grad: ['#FEE2E2','#FEF2F2'] as [string,string], icon: 'document-text' as const }
     case 'doc':
-    case 'docx': return { color: '#2563EB', bg: '#DBEAFE', icon: 'document' as const }
+    case 'docx': return { color: '#2563EB', bg: '#DBEAFE', grad: ['#DBEAFE','#EFF6FF'] as [string,string], icon: 'document' as const }
     case 'xls':
-    case 'xlsx': return { color: '#16A34A', bg: '#DCFCE7', icon: 'grid' as const }
+    case 'xlsx': return { color: '#16A34A', bg: '#DCFCE7', grad: ['#DCFCE7','#F0FDF4'] as [string,string], icon: 'grid' as const }
     case 'jpg':
     case 'jpeg':
-    case 'png':  return { color: '#7C3AED', bg: '#EDE9FE', icon: 'image' as const }
-    default:     return { color: '#475569', bg: '#F1F5F9', icon: 'attach' as const }
+    case 'png':  return { color: '#7C3AED', bg: '#EDE9FE', grad: ['#EDE9FE','#F5F3FF'] as [string,string], icon: 'image' as const }
+    default:     return { color: '#475569', bg: '#F1F5F9', grad: ['#F1F5F9','#F8FAFC'] as [string,string], icon: 'attach' as const }
   }
 }
 
 export default function DetailArsipScreen() {
   const { user } = useAuth()
-  const nav    = useNavigation()
-  const route  = useRoute<Route>()
-  const insets = useSafeAreaInsets()
+  const nav      = useNavigation()
+  const route    = useRoute<Route>()
+  const insets   = useSafeAreaInsets()
 
   const [archive,     setArchive]     = useState<Archive | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [showEdit,    setShowEdit]    = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [saving,      setSaving]      = useState(false)
-  const fadeAnim = useState(new Animated.Value(0))[0]
-  const slideAnim = useState(new Animated.Value(30))[0]
 
-  // Edit fields
+  const fadeAnim  = useRef(new Animated.Value(0)).current
+  const slideAnim = useRef(new Animated.Value(24)).current
+
   const [editJudul,    setEditJudul]    = useState('')
   const [editPengirim, setEditPengirim] = useState('')
   const [editPenerima, setEditPenerima] = useState('')
@@ -112,9 +115,8 @@ export default function DetailArsipScreen() {
       setShowEdit(false)
       Alert.alert('Berhasil ✅', 'Arsip berhasil diperbarui')
       load()
-    } catch (e: any) {
-      Alert.alert('Gagal', e.message)
-    } finally { setSaving(false) }
+    } catch (e: any) { Alert.alert('Gagal', e.message) }
+    finally { setSaving(false) }
   }
 
   async function handleDownload() {
@@ -126,17 +128,11 @@ export default function DetailArsipScreen() {
       const result    = await FileSystem.downloadAsync(fileUrl, localUri)
       const canShare  = await Sharing.isAvailableAsync()
       if (canShare) {
-        await Sharing.shareAsync(result.uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Buka atau Simpan File',
-          UTI: 'com.adobe.pdf',
-        })
+        await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Buka atau Simpan File', UTI: 'com.adobe.pdf' })
       } else {
         Alert.alert('Berhasil', 'File tersimpan di: ' + result.uri)
       }
-    } catch (e: any) {
-      Alert.alert('Gagal mengunduh', e.message)
-    }
+    } catch (e: any) { Alert.alert('Gagal mengunduh', e.message) }
   }
 
   async function handleDelete() {
@@ -154,13 +150,11 @@ export default function DetailArsipScreen() {
     ])
   }
 
-  // ── LOADING ──
   if (loading) return (
     <View style={s.loadingRoot}>
-      <View style={s.loadingCard}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={s.loadingText}>Memuat detail arsip...</Text>
-      </View>
+      <StatusBar barStyle="dark-content" />
+      <ActivityIndicator size="large" color="#3B82F6" />
+      <Text style={s.loadingText}>Memuat detail arsip...</Text>
     </View>
   )
   if (!archive) return null
@@ -174,145 +168,175 @@ export default function DetailArsipScreen() {
 
   return (
     <View style={s.root}>
+      <StatusBar barStyle="light-content" backgroundColor={catColor} />
 
-      {/* ── SCROLLABLE CONTENT ── */}
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 110 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
         style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
       >
 
-        {/* ══ HERO GRADIENT HEADER ══ */}
+        {/* ══ HERO ══ */}
         <LinearGradient
-          colors={[catColor, catColor + 'CC', '#F1F5F9']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.hero}
+          colors={[catColor, catColor + 'BB', '#F1F5F9']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1.2 }}
+          style={[s.hero, { paddingTop: insets.top + 16 }]}
         >
-          {/* Back button area placeholder (nav header handles back) */}
-          <View style={[s.heroDocIcon, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-            <Ionicons name={extCfg.icon} size={40} color="#fff" />
+          {/* Decorative rings */}
+          <View style={[s.heroRing, { width: 200, height: 200, top: -80, right: -60 }]} />
+          <View style={[s.heroRing, { width: 120, height: 120, top: 20,  right: 40  }]} />
+
+          {/* Doc icon */}
+          <View style={s.heroIconWrap}>
+            <LinearGradient colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.15)']} style={s.heroIconBox}>
+              <Ionicons name={extCfg.icon} size={38} color="#fff" />
+            </LinearGradient>
           </View>
 
-          <View style={s.heroBadgeRow}>
-            {/* Status badge */}
-            <View style={[s.statusPill, { backgroundColor: statusCfg.bg }]}>
-              <View style={[s.statusDot, { backgroundColor: statusCfg.dot }]} />
-              <Text style={[s.statusPillText, { color: statusCfg.text }]}>{statusCfg.label}</Text>
+          {/* Badges */}
+          <View style={s.heroBadges}>
+            <LinearGradient colors={statusCfg.gradColors} style={s.statusBadge}>
+              <View style={s.statusLed} />
+              <Text style={s.statusBadgeText}>{statusCfg.label}</Text>
+            </LinearGradient>
+            <View style={[s.extBadge, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+              <Text style={s.extBadgeText}>{ext}</Text>
             </View>
-            {/* EXT badge */}
-            <View style={[s.extPill, { backgroundColor: extCfg.bg }]}>
-              <Text style={[s.extPillText, { color: extCfg.color }]}>{ext}</Text>
+            <View style={[s.catBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={s.catBadgeText}>{archive.category?.nama ?? '—'}</Text>
             </View>
-            {/* Category */}
-            <CategoryChip name={archive.category?.nama ?? ''} />
           </View>
 
           <Text style={s.heroTitle}>{archive.judul}</Text>
-          <Text style={s.heroSub}>No. {archive.nomorSurat || '—'}</Text>
+          <View style={s.heroNomorRow}>
+            <Ionicons name="barcode-outline" size={13} color="rgba(255,255,255,0.7)" />
+            <Text style={s.heroNomor}>{archive.nomorSurat || 'Tanpa Nomor'}</Text>
+          </View>
         </LinearGradient>
 
-        {/* ══ QUICK STATS STRIP ══ */}
-        <View style={s.statsStrip}>
-          <StatItem icon="calendar-outline" label="Tgl. Surat" value={formatDate(archive.tanggalSurat)} color="#3B82F6" />
-          <View style={s.statsDivider} />
-          <StatItem icon="time-outline" label="Retensi" value={`${archive.masaRetensi} bln`} color="#F59E0B" />
-          <View style={s.statsDivider} />
-          <StatItem icon="business-outline" label="Unit" value={archive.unit?.namaUnit ?? '—'} color="#10B981" />
+        {/* ══ QUICK STATS — overlap hero ══ */}
+        <View style={s.statsCard}>
+          {[
+            { icon: 'calendar-outline',  label: 'Tgl. Surat', value: formatDate(archive.tanggalSurat), color: '#3B82F6' },
+            { icon: 'time-outline',       label: 'Retensi',    value: `${archive.masaRetensi} bln`,     color: '#F59E0B' },
+            { icon: 'business-outline',   label: 'Unit',       value: archive.unit?.namaUnit ?? '—',    color: '#10B981' },
+          ].map((item, i) => (
+            <React.Fragment key={i}>
+              <View style={s.statItem}>
+                <View style={[s.statIconBox, { backgroundColor: item.color + '15' }]}>
+                  <Ionicons name={item.icon as any} size={14} color={item.color} />
+                </View>
+                <Text style={s.statLbl}>{item.label}</Text>
+                <Text style={s.statVal} numberOfLines={1}>{item.value}</Text>
+              </View>
+              {i < 2 && <View style={s.statDiv} />}
+            </React.Fragment>
+          ))}
         </View>
 
         {/* ══ INFORMASI DOKUMEN ══ */}
-        <SectionCard title="Informasi Dokumen" icon="document-text-outline" iconColor="#3B82F6" iconBg="#EFF6FF">
-          <InfoItem label="Nomor Surat"   value={archive.nomorSurat}             icon="barcode-outline"    color="#3B82F6" />
-          <InfoItem label="Tanggal Surat" value={formatDate(archive.tanggalSurat)} icon="calendar-outline"  color="#8B5CF6" />
-          <InfoItem label="Pengirim"      value={archive.pengirim}               icon="person-outline"     color="#F59E0B" />
-          <InfoItem label="Penerima"      value={archive.penerima}               icon="people-outline"     color="#10B981" />
-          <InfoItem label="Perihal"       value={archive.perihal}                icon="chatbubble-outline"  color="#EF4444" />
-          <InfoItem label="Unit Kerja"    value={archive.unit?.namaUnit}         icon="business-outline"   color="#06B6D4" />
-          <InfoItem label="Masa Retensi"  value={`${archive.masaRetensi} bulan`} icon="hourglass-outline"  color="#F97316" last />
-        </SectionCard>
+        <Block title="Informasi Dokumen" icon="document-text-outline" iconColor="#3B82F6" iconBg="#EFF6FF">
+          <InfoRow icon="barcode-outline"    color="#3B82F6" label="Nomor Surat"   value={archive.nomorSurat} />
+          <InfoRow icon="calendar-outline"   color="#8B5CF6" label="Tgl. Surat"   value={formatDate(archive.tanggalSurat)} />
+          <InfoRow icon="person-outline"     color="#F59E0B" label="Pengirim"      value={archive.pengirim} />
+          <InfoRow icon="people-outline"     color="#10B981" label="Penerima"      value={archive.penerima} />
+          <InfoRow icon="chatbubble-outline" color="#EF4444" label="Perihal"       value={archive.perihal} />
+          <InfoRow icon="business-outline"   color="#06B6D4" label="Unit Kerja"    value={archive.unit?.namaUnit} />
+          <InfoRow icon="hourglass-outline"  color="#F97316" label="Masa Retensi"  value={`${archive.masaRetensi} bulan`} last />
+        </Block>
 
         {/* ══ RIWAYAT UPLOAD ══ */}
-        <SectionCard title="Riwayat Upload" icon="cloud-upload-outline" iconColor="#8B5CF6" iconBg="#EDE9FE">
-          <InfoItem label="Diunggah oleh"  value={archive.user?.namaLengkap}     icon="person-circle-outline" color="#8B5CF6" />
-          <InfoItem label="Tanggal Upload" value={formatDate(archive.createdAt)} icon="calendar-outline"      color="#3B82F6" last />
-        </SectionCard>
+        <Block title="Riwayat Upload" icon="cloud-upload-outline" iconColor="#8B5CF6" iconBg="#EDE9FE">
+          <InfoRow icon="person-circle-outline" color="#8B5CF6" label="Diunggah oleh"  value={archive.user?.namaLengkap} />
+          <InfoRow icon="calendar-outline"      color="#3B82F6" label="Tanggal Upload" value={formatDate(archive.createdAt)} last />
+        </Block>
 
         {/* ══ FILE DOKUMEN ══ */}
-        <SectionCard title="File Dokumen" icon="attach-outline" iconColor="#EF4444" iconBg="#FEE2E2">
+        <Block title="File Dokumen" icon="attach-outline" iconColor="#EF4444" iconBg="#FEE2E2">
           {fileUrl ? (
             <TouchableOpacity style={s.fileCard} onPress={() => setShowPreview(true)} activeOpacity={0.85}>
-              <LinearGradient
-                colors={[extCfg.bg, extCfg.bg + '88']}
-                style={s.fileIconWrap}
-              >
-                <Ionicons name={extCfg.icon} size={30} color={extCfg.color} />
+              <LinearGradient colors={extCfg.grad} style={s.fileIconBox}>
+                <Ionicons name={extCfg.icon} size={28} color={extCfg.color} />
               </LinearGradient>
               <View style={{ flex: 1 }}>
                 <Text style={s.fileCardName} numberOfLines={2}>{fileName}</Text>
-                <View style={s.filePreviewHint}>
-                  <Ionicons name="eye-outline" size={12} color="#94A3B8" />
-                  <Text style={s.filePreviewText}>Ketuk untuk pratinjau</Text>
+                <View style={s.fileHint}>
+                  <Ionicons name="eye-outline" size={11} color="#94A3B8" />
+                  <Text style={s.fileHintText}>Ketuk untuk pratinjau dokumen</Text>
                 </View>
               </View>
-              <View style={[s.fileExtBadge, { backgroundColor: extCfg.bg }]}>
-                <Text style={[s.fileExtText, { color: extCfg.color }]}>{ext}</Text>
+              <View style={[s.fileExtChip, { backgroundColor: extCfg.bg }]}>
+                <Text style={[s.fileExtChipText, { color: extCfg.color }]}>{ext}</Text>
               </View>
             </TouchableOpacity>
           ) : (
             <View style={s.noFile}>
-              <Ionicons name="document-outline" size={32} color="#CBD5E1" />
+              <View style={s.noFileIconBox}>
+                <Ionicons name="document-outline" size={28} color="#CBD5E1" />
+              </View>
               <Text style={s.noFileText}>Tidak ada file terlampir</Text>
             </View>
           )}
-        </SectionCard>
+        </Block>
+
+        {/* ══ URUSAN (jika ada) ══ */}
+        {(archive as any).urusan && (
+          <Block title="Klasifikasi Urusan" icon="pricetag-outline" iconColor="#8B5CF6" iconBg="#F5F3FF">
+            <View style={s.urusanRow}>
+              <LinearGradient colors={['#8B5CF6','#7C3AED']} style={s.urusanBadge}>
+                <Text style={s.urusanKode}>{(archive as any).urusan.kodeUrusan}</Text>
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={s.urusanNama}>{(archive as any).urusan.namaUrusan}</Text>
+                {(archive as any).urusan.deskripsi && (
+                  <Text style={s.urusanDesc} numberOfLines={2}>{(archive as any).urusan.deskripsi}</Text>
+                )}
+              </View>
+            </View>
+          </Block>
+        )}
 
       </Animated.ScrollView>
 
-      {/* ══ FLOATING BOTTOM BAR ══ */}
-      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
+      {/* ══ BOTTOM BAR ══ */}
+      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 10 }]}>
         <TouchableOpacity
           style={[s.btnDownload, !fileUrl && { opacity: 0.4 }]}
           onPress={handleDownload}
           disabled={!fileUrl}
           activeOpacity={0.85}
         >
-          <LinearGradient colors={['#3B82F6', '#2563EB']} style={s.btnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-            <Ionicons name="download-outline" size={18} color="#fff" />
+          <LinearGradient colors={['#3B82F6','#2563EB']} style={s.btnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <Ionicons name="download-outline" size={17} color="#fff" />
             <Text style={s.btnDownloadText}>Unduh File</Text>
           </LinearGradient>
         </TouchableOpacity>
 
         {canEdit && (
-          <View style={s.btnGroup}>
-            <TouchableOpacity style={s.btnIcon} onPress={openEdit} activeOpacity={0.8}>
-              <Ionicons name="create-outline" size={20} color="#3B82F6" />
+          <View style={s.btnActions}>
+            <TouchableOpacity style={s.btnEdit} onPress={openEdit} activeOpacity={0.8}>
+              <Ionicons name="create-outline" size={19} color="#3B82F6" />
             </TouchableOpacity>
-            <TouchableOpacity style={[s.btnIcon, { backgroundColor: '#FEF2F2' }]} onPress={handleDelete} activeOpacity={0.8}>
-              <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            <TouchableOpacity style={s.btnDelete} onPress={handleDelete} activeOpacity={0.8}>
+              <Ionicons name="trash-outline" size={19} color="#EF4444" />
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {/* ══════════════════════════════════════
-          MODAL: PREVIEW PDF
-      ══════════════════════════════════════ */}
+      {/* ══ PREVIEW MODAL ══ */}
       <Modal visible={showPreview} animationType="slide" transparent={false}>
         <View style={{ flex: 1, backgroundColor: '#0F172A' }}>
-          <LinearGradient
-            colors={['#1E293B', '#0F172A']}
-            style={[s.previewHeader, { paddingTop: insets.top + 10 }]}
-          >
+          <LinearGradient colors={['#1E293B','#0F172A']} style={[s.previewHeader, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity style={s.previewBtn} onPress={() => setShowPreview(false)}>
-              <Ionicons name="arrow-back" size={20} color="#fff" />
+              <Ionicons name="arrow-back" size={19} color="#fff" />
             </TouchableOpacity>
             <View style={{ flex: 1, marginHorizontal: 12 }}>
               <Text style={s.previewTitle} numberOfLines={1}>{fileName}</Text>
-              <Text style={s.previewSubtitle}>{ext} Document</Text>
+              <Text style={s.previewSub}>{ext} Document</Text>
             </View>
             <TouchableOpacity style={[s.previewBtn, { backgroundColor: '#3B82F6' }]} onPress={handleDownload}>
-              <Ionicons name="download-outline" size={20} color="#fff" />
+              <Ionicons name="download-outline" size={19} color="#fff" />
             </TouchableOpacity>
           </LinearGradient>
           <WebView
@@ -322,42 +346,38 @@ export default function DetailArsipScreen() {
             renderLoading={() => (
               <View style={s.previewLoading}>
                 <ActivityIndicator size="large" color="#3B82F6" />
-                <Text style={s.previewLoadingText}>Memuat dokumen...</Text>
+                <Text style={{ color: '#94A3B8', fontSize: 13, marginTop: 12 }}>Memuat dokumen...</Text>
               </View>
             )}
           />
         </View>
       </Modal>
 
-      {/* ══════════════════════════════════════
-          MODAL: EDIT ARSIP
-      ══════════════════════════════════════ */}
+      {/* ══ EDIT MODAL ══ */}
       <Modal visible={showEdit} animationType="slide" transparent>
         <View style={s.modalOverlay}>
           <View style={s.modalSheet}>
-            {/* Handle */}
             <View style={s.modalHandle} />
-
             <View style={s.modalHeaderRow}>
-              <View style={s.modalIconBox}>
+              <LinearGradient colors={['#EFF6FF','#DBEAFE']} style={s.modalIconBox}>
                 <Ionicons name="create-outline" size={18} color="#3B82F6" />
-              </View>
+              </LinearGradient>
               <View style={{ flex: 1 }}>
                 <Text style={s.modalTitle}>Edit Arsip</Text>
                 <Text style={s.modalSub}>Perbarui informasi dokumen</Text>
               </View>
               <TouchableOpacity style={s.modalCloseBtn} onPress={() => setShowEdit(false)}>
-                <Ionicons name="close" size={18} color="#64748B" />
+                <Ionicons name="close" size={17} color="#64748B" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }}>
-              <EditField label="Nomor Surat"         value={editNomor}    onChangeText={setEditNomor}    icon="barcode-outline" />
-              <EditField label="Judul Arsip"          value={editJudul}    onChangeText={setEditJudul}    icon="document-text-outline" required />
-              <EditField label="Pengirim"             value={editPengirim} onChangeText={setEditPengirim} icon="person-outline" required />
-              <EditField label="Penerima"             value={editPenerima} onChangeText={setEditPenerima} icon="people-outline" required />
-              <EditField label="Perihal"              value={editPerihal}  onChangeText={setEditPerihal}  icon="chatbubble-outline" required multiline />
-              <EditField label="Masa Retensi (bulan)" value={editRetensi}  onChangeText={setEditRetensi}  icon="hourglass-outline" keyboardType="numeric" />
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              <EditField icon="barcode-outline"       label="Nomor Surat"         value={editNomor}    onChangeText={setEditNomor} />
+              <EditField icon="document-text-outline" label="Judul Arsip"          value={editJudul}    onChangeText={setEditJudul}    required />
+              <EditField icon="person-outline"        label="Pengirim"             value={editPengirim} onChangeText={setEditPengirim} required />
+              <EditField icon="people-outline"        label="Penerima"             value={editPenerima} onChangeText={setEditPenerima} required />
+              <EditField icon="chatbubble-outline"    label="Perihal"              value={editPerihal}  onChangeText={setEditPerihal}  required multiline />
+              <EditField icon="hourglass-outline"     label="Masa Retensi (bulan)" value={editRetensi}  onChangeText={setEditRetensi}  keyboardType="numeric" />
             </ScrollView>
 
             <View style={s.modalFooter}>
@@ -370,11 +390,11 @@ export default function DetailArsipScreen() {
                 disabled={saving}
                 activeOpacity={0.85}
               >
-                <LinearGradient colors={['#3B82F6', '#2563EB']} style={s.saveBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                <LinearGradient colors={['#3B82F6','#2563EB']} style={s.saveBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                   {saving
                     ? <ActivityIndicator color="#fff" size="small" />
                     : <>
-                        <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                        <Ionicons name="checkmark-circle" size={15} color="#fff" />
                         <Text style={s.saveText}>Simpan Perubahan</Text>
                       </>
                   }
@@ -390,45 +410,33 @@ export default function DetailArsipScreen() {
 
 // ─── SUB COMPONENTS ──────────────────────────────────
 
-function StatItem({ icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
-  return (
-    <View style={s.statItem}>
-      <View style={[s.statIconBox, { backgroundColor: color + '15' }]}>
-        <Ionicons name={icon} size={14} color={color} />
-      </View>
-      <Text style={s.statLabel}>{label}</Text>
-      <Text style={s.statValue} numberOfLines={1}>{value}</Text>
-    </View>
-  )
-}
-
-function SectionCard({ title, icon, iconColor, iconBg, children }: {
+function Block({ title, icon, iconColor, iconBg, children }: {
   title: string; icon: any; iconColor: string; iconBg: string; children: React.ReactNode
 }) {
   return (
-    <View style={s.card}>
-      <View style={s.cardHeader}>
-        <View style={[s.cardIconBox, { backgroundColor: iconBg }]}>
-          <Ionicons name={icon} size={15} color={iconColor} />
+    <View style={s.block}>
+      <View style={s.blockHeader}>
+        <View style={[s.blockIconBox, { backgroundColor: iconBg }]}>
+          <Ionicons name={icon} size={14} color={iconColor} />
         </View>
-        <Text style={s.cardTitle}>{title}</Text>
+        <Text style={s.blockTitle}>{title}</Text>
       </View>
       {children}
     </View>
   )
 }
 
-function InfoItem({ label, value, icon, color, last }: {
-  label: string; value?: string; icon: any; color: string; last?: boolean
+function InfoRow({ icon, color, label, value, last }: {
+  icon: any; color: string; label: string; value?: string; last?: boolean
 }) {
   return (
-    <View style={[s.infoItem, last && { borderBottomWidth: 0 }]}>
-      <View style={[s.infoIconBox, { backgroundColor: color + '15' }]}>
+    <View style={[s.infoRow, last && { borderBottomWidth: 0 }]}>
+      <View style={[s.infoIconBox, { backgroundColor: color + '12' }]}>
         <Ionicons name={icon} size={13} color={color} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={s.infoLabel}>{label}</Text>
-        <Text style={s.infoValue} numberOfLines={2}>{value || '—'}</Text>
+        <Text style={s.infoLbl}>{label}</Text>
+        <Text style={s.infoVal} numberOfLines={3}>{value || '—'}</Text>
       </View>
     </View>
   )
@@ -442,7 +450,11 @@ function EditField({ label, value, onChangeText, multiline, keyboardType, icon, 
   return (
     <View style={s.editWrap}>
       <View style={s.editLabelRow}>
-        {icon && <Ionicons name={icon} size={12} color="#94A3B8" />}
+        {icon && (
+          <View style={s.editLabelIcon}>
+            <Ionicons name={icon} size={11} color="#94A3B8" />
+          </View>
+        )}
         <Text style={s.editLabel}>{label}</Text>
         {required && <Text style={s.editRequired}>*</Text>}
       </View>
@@ -455,6 +467,7 @@ function EditField({ label, value, onChangeText, multiline, keyboardType, icon, 
         placeholderTextColor="#CBD5E1"
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        textAlignVertical={multiline ? 'top' : 'auto'}
       />
     </View>
   )
@@ -462,96 +475,105 @@ function EditField({ label, value, onChangeText, multiline, keyboardType, icon, 
 
 // ─── STYLES ──────────────────────────────────────────
 const s = StyleSheet.create({
-  root:       { flex: 1, backgroundColor: '#F1F5F9' },
-
-  // Loading
-  loadingRoot: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9' },
-  loadingCard: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 20, padding: 32, gap: 12, ...SHADOW.sm },
+  root:        { flex: 1, backgroundColor: '#F1F5F9' },
+  loadingRoot: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9', gap: 14 },
   loadingText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
 
   // Hero
-  hero:         { paddingTop: 28, paddingBottom: 32, paddingHorizontal: 24, alignItems: 'center', gap: 12 },
-  heroDocIcon:  { width: 80, height: 80, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-  heroBadgeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
-  heroTitle:    { fontSize: 18, fontWeight: '800', color: '#fff', textAlign: 'center', lineHeight: 26, textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-  heroSub:      { fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: '600', letterSpacing: 0.5 },
+  hero:        { paddingHorizontal: 20, paddingBottom: 36, alignItems: 'center', gap: 10, overflow: 'hidden' },
+  heroRing:    { position: 'absolute', borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  heroIconWrap:{ marginBottom: 4 },
+  heroIconBox: { width: 76, height: 76, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  heroBadges:  { flexDirection: 'row', gap: 7, flexWrap: 'wrap', justifyContent: 'center' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  statusLed:   { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.8)' },
+  statusBadgeText:{ fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  extBadge:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  extBadgeText:{ fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+  catBadge:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  catBadgeText:{ fontSize: 10, fontWeight: '700', color: '#fff' },
+  heroTitle:   { fontSize: 17, fontWeight: '800', color: '#fff', textAlign: 'center', lineHeight: 25, textShadowColor: 'rgba(0,0,0,0.15)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  heroNomorRow:{ flexDirection: 'row', alignItems: 'center', gap: 5 },
+  heroNomor:   { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 0.3 },
 
-  // Status / Ext pills
-  statusPill:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  statusDot:      { width: 6, height: 6, borderRadius: 3 },
-  statusPillText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  extPill:        { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  extPillText:    { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  // Stats card — overlaps hero
+  statsCard:  { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: -20, borderRadius: 18, padding: 14, shadowColor: '#64748B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  statItem:   { flex: 1, alignItems: 'center', gap: 4 },
+  statDiv:    { width: 1, backgroundColor: '#F1F5F9', marginVertical: 4 },
+  statIconBox:{ width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  statLbl:    { fontSize: 9, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  statVal:    { fontSize: 11, color: '#0F172A', fontWeight: '700', textAlign: 'center' },
 
-  // Stats strip
-  statsStrip:   { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: -16, borderRadius: 16, padding: 16, ...SHADOW.sm },
-  statItem:     { flex: 1, alignItems: 'center', gap: 4 },
-  statsDivider: { width: 1, backgroundColor: '#E2E8F0' },
-  statIconBox:  { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  statLabel:    { fontSize: 10, color: '#94A3B8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  statValue:    { fontSize: 12, color: '#1E293B', fontWeight: '700', textAlign: 'center' },
+  // Block
+  block:       { backgroundColor: '#fff', borderRadius: 20, padding: 18, marginHorizontal: 14, marginTop: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+  blockIconBox:{ width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  blockTitle:  { fontSize: 13, fontWeight: '800', color: '#0F172A' },
 
-  // Card
-  card:       { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginHorizontal: 16, marginTop: 12, ...SHADOW.sm },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  cardIconBox:{ width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  cardTitle:  { fontSize: 14, fontWeight: '800', color: '#1E293B', letterSpacing: 0.2 },
-
-  // Info items
-  infoItem:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
-  infoIconBox: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 1 },
-  infoLabel:   { fontSize: 11, color: '#94A3B8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 },
-  infoValue:   { fontSize: 13, color: '#1E293B', fontWeight: '600', lineHeight: 18 },
+  // Info rows
+  infoRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+  infoIconBox:{ width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 1, flexShrink: 0 },
+  infoLbl:    { fontSize: 10, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 3 },
+  infoVal:    { fontSize: 13, color: '#1E293B', fontWeight: '600', lineHeight: 18 },
 
   // File card
-  fileCard:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, gap: 12, borderWidth: 1.5, borderColor: '#E2E8F0' },
-  fileIconWrap:  { width: 52, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  fileCardName:  { fontSize: 13, fontWeight: '700', color: '#1E293B', lineHeight: 18 },
-  filePreviewHint:{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  filePreviewText:{ fontSize: 11, color: '#94A3B8' },
-  fileExtBadge:  { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  fileExtText:   { fontSize: 10, fontWeight: '800' },
-  noFile:        { alignItems: 'center', gap: 8, paddingVertical: 20 },
-  noFileText:    { color: '#CBD5E1', fontSize: 13, fontWeight: '600' },
+  fileCard:     { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 14, padding: 13, gap: 12, borderWidth: 1.5, borderColor: '#E2E8F0' },
+  fileIconBox:  { width: 50, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  fileCardName: { fontSize: 13, fontWeight: '700', color: '#1E293B', lineHeight: 18, marginBottom: 4 },
+  fileHint:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  fileHintText: { fontSize: 10, color: '#94A3B8' },
+  fileExtChip:  { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  fileExtChipText:{ fontSize: 10, fontWeight: '800' },
+  noFile:       { alignItems: 'center', paddingVertical: 20, gap: 8 },
+  noFileIconBox:{ width: 52, height: 52, borderRadius: 16, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  noFileText:   { color: '#CBD5E1', fontSize: 13, fontWeight: '600' },
+
+  // Urusan row
+  urusanRow:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  urusanBadge: { width: 46, height: 46, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
+  urusanKode:  { color: '#fff', fontSize: 11, fontWeight: '900', textAlign: 'center' },
+  urusanNama:  { fontSize: 13, fontWeight: '700', color: '#1E293B' },
+  urusanDesc:  { fontSize: 11, color: '#64748B', marginTop: 2, lineHeight: 16 },
 
   // Bottom bar
-  bottomBar:    { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 14, paddingHorizontal: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
-  btnDownload:  { flex: 1, borderRadius: 14, overflow: 'hidden' },
-  btnGradient:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15 },
-  btnDownloadText:{ color: '#fff', fontSize: 15, fontWeight: '700' },
-  btnGroup:     { flexDirection: 'row', gap: 8 },
-  btnIcon:      { width: 50, height: 50, borderRadius: 14, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
+  bottomBar:      { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  btnDownload:    { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  btnGrad:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 14 },
+  btnDownloadText:{ color: '#fff', fontSize: 14, fontWeight: '700' },
+  btnActions:     { flexDirection: 'row', gap: 8 },
+  btnEdit:        { width: 48, height: 48, borderRadius: 14, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
+  btnDelete:      { width: 48, height: 48, borderRadius: 14, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
 
   // Preview modal
-  previewHeader:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14, gap: 10 },
-  previewBtn:         { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },
-  previewTitle:       { color: '#fff', fontSize: 14, fontWeight: '700' },
-  previewSubtitle:    { color: '#94A3B8', fontSize: 11, marginTop: 1 },
-  previewLoading:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9', gap: 12 },
-  previewLoadingText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
+  previewHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14, gap: 10 },
+  previewBtn:    { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },
+  previewTitle:  { color: '#fff', fontSize: 13, fontWeight: '700' },
+  previewSub:    { color: '#64748B', fontSize: 11, marginTop: 1 },
+  previewLoading:{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9' },
 
   // Edit modal
   modalOverlay:   { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'flex-end' },
-  modalSheet:     { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 36 },
-  modalHandle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 20 },
-  modalHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  modalIconBox:   { width: 40, height: 40, borderRadius: 12, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
-  modalTitle:     { fontSize: 16, fontWeight: '800', color: '#1E293B' },
-  modalSub:       { fontSize: 12, color: '#94A3B8', marginTop: 1 },
-  modalCloseBtn:  { width: 32, height: 32, borderRadius: 10, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  modalFooter:    { flexDirection: 'row', gap: 10, marginTop: 20 },
-  cancelBtn:      { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#F1F5F9', alignItems: 'center' },
-  cancelText:     { color: '#64748B', fontWeight: '700', fontSize: 14 },
+  modalSheet:     { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 36 },
+  modalHandle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 18 },
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  modalIconBox:   { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  modalTitle:     { fontSize: 15, fontWeight: '800', color: '#1E293B' },
+  modalSub:       { fontSize: 11, color: '#94A3B8', marginTop: 1 },
+  modalCloseBtn:  { width: 30, height: 30, borderRadius: 9, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  modalFooter:    { flexDirection: 'row', gap: 10, marginTop: 18 },
+  cancelBtn:      { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: '#F1F5F9', alignItems: 'center' },
+  cancelText:     { color: '#64748B', fontWeight: '700', fontSize: 13 },
   saveBtn:        { flex: 2, borderRadius: 14, overflow: 'hidden' },
-  saveBtnGradient:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },
-  saveText:       { color: '#fff', fontWeight: '700', fontSize: 14 },
+  saveBtnGrad:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 13 },
+  saveText:       { color: '#fff', fontWeight: '700', fontSize: 13 },
 
   // Edit fields
-  editWrap:        { marginBottom: 14 },
-  editLabelRow:    { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 7 },
-  editLabel:       { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  editRequired:    { fontSize: 12, color: '#EF4444', fontWeight: '800' },
-  editInput:       { borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: '#1E293B', backgroundColor: '#F8FAFC' },
+  editWrap:        { marginBottom: 13 },
+  editLabelRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  editLabelIcon:   { width: 18, height: 18, borderRadius: 5, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  editLabel:       { fontSize: 11, fontWeight: '700', color: '#475569', flex: 1 },
+  editRequired:    { fontSize: 11, color: '#EF4444', fontWeight: '800' },
+  editInput:       { borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 13, paddingVertical: 10, fontSize: 13, color: '#1E293B', backgroundColor: '#F8FAFC' },
   editInputFocused:{ borderColor: '#3B82F6', backgroundColor: '#fff' },
   editMultiline:   { height: 80, textAlignVertical: 'top' },
 })
