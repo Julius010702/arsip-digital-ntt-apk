@@ -22,26 +22,28 @@ export async function POST(req: NextRequest) {
 
     if (!file) return err('File tidak ditemukan')
 
-    const bytes  = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    const base64 = buffer.toString('base64')
+    const bytes   = await file.arrayBuffer()
+    const buffer  = Buffer.from(bytes)
+    const base64  = buffer.toString('base64')
     const dataUri = `data:${file.type};base64,${base64}`
 
     const result = await cloudinary.uploader.upload(dataUri, {
       folder:        'arsip-digital-ntt',
       resource_type: 'raw',
+      type:          'upload',
+      access_mode:   'public',
       public_id:     `${Date.now()}-${file.name.replace(/\s+/g, '_')}`,
     })
 
     return NextResponse.json({
-      success:  true,
-      message:  'File berhasil diupload',
+      success: true,
+      message: 'File berhasil diupload',
       data: {
-        url:       result.secure_url,
-        publicId:  result.public_id,
-        fileName:  file.name,
-        fileSize:  file.size,
-        mimeType:  file.type,
+        url:      result.secure_url,
+        publicId: result.public_id,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
       },
     })
   } catch (e: any) {
