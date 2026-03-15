@@ -28,34 +28,54 @@ const Stack = createNativeStackNavigator<RootStackParams>()
 const Tab   = createBottomTabNavigator<TabParams>()
 
 const HEADER_OPT = {
-  headerStyle:           { backgroundColor: COLORS.primaryDark },
-  headerTintColor:       COLORS.white,
-  headerTitleStyle:      { fontWeight: '700' as const, fontSize: 16 },
+  headerStyle:            { backgroundColor: COLORS.primaryDark },
+  headerTintColor:        COLORS.white,
+  headerTitleStyle:       { fontWeight: '700' as const, fontSize: 16 },
   headerBackTitleVisible: false,
 }
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
 const TAB_CFG: Record<keyof TabParams, { active: IoniconName; inactive: IoniconName; label: string }> = {
-  Dashboard: { active: 'home',   inactive: 'home-outline',   label: 'Beranda' },
-  Arsip:     { active: 'folder', inactive: 'folder-outline', label: 'Arsip'   },
-  Cari:      { active: 'search', inactive: 'search-outline', label: 'Cari'    },
-  Profil:    { active: 'person', inactive: 'person-outline', label: 'Profil'  },
+  Dashboard:   { active: 'home',            inactive: 'home-outline',           label: 'Beranda' },
+  Arsip:       { active: 'folder',          inactive: 'folder-outline',         label: 'Arsip'   },
+  UploadArsip: { active: 'cloud-upload',    inactive: 'cloud-upload-outline',   label: 'Upload'  },
+  Cari:        { active: 'search',          inactive: 'search-outline',         label: 'Cari'    },
+  Profil:      { active: 'person',          inactive: 'person-outline',         label: 'Profil'  },
 }
 
 function TabNav() {
   const insets = useSafeAreaInsets()
+  const { user } = useAuth()
+  const canUpload = user?.role === 'super_admin' || user?.role === 'admin_unit'
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => {
         const cfg = TAB_CFG[route.name as keyof TabParams]
+        const isUpload = route.name === 'UploadArsip'
         return {
           headerShown: false,
           tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons name={focused ? cfg.active : cfg.inactive} size={size} color={color} />
+            isUpload ? (
+              <View style={{
+                width: 52, height: 52, borderRadius: 26,
+                backgroundColor: COLORS.primaryLight,
+                justifyContent: 'center', alignItems: 'center',
+                marginBottom: 8,
+                shadowColor: COLORS.primaryLight,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.4,
+                shadowRadius: 8,
+                elevation: 8,
+              }}>
+                <Ionicons name="cloud-upload" size={24} color={COLORS.white} />
+              </View>
+            ) : (
+              <Ionicons name={focused ? cfg.active : cfg.inactive} size={size} color={color} />
+            )
           ),
-          tabBarLabel:             cfg.label,
+          tabBarLabel: isUpload ? '' : cfg.label,
           tabBarActiveTintColor:   COLORS.primaryLight,
           tabBarInactiveTintColor: COLORS.placeholder,
           tabBarStyle: {
@@ -69,10 +89,17 @@ function TabNav() {
         }
       }}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Arsip"     component={ArsipScreen} />
-      <Tab.Screen name="Cari"      component={CariScreen} />
-      <Tab.Screen name="Profil"    component={ProfilScreen} />
+      <Tab.Screen name="Dashboard"   component={DashboardScreen} />
+      <Tab.Screen name="Arsip"       component={ArsipScreen} />
+      {canUpload && (
+        <Tab.Screen
+          name="UploadArsip"
+          component={UploadArsipScreen}
+          options={{ tabBarLabel: '' }}
+        />
+      )}
+      <Tab.Screen name="Cari"   component={CariScreen} />
+      <Tab.Screen name="Profil" component={ProfilScreen} />
     </Tab.Navigator>
   )
 }

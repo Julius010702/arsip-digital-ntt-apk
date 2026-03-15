@@ -3,19 +3,20 @@
 // ======================================================
 
 export type RootStackParams = {
-  Login:        undefined
-  MainTab:      undefined
-  DetailArsip:  { id: number }
-  UploadArsip:  undefined
-  Penilaian:    undefined
+  Login:           undefined
+  MainTab:         undefined
+  DetailArsip:     { id: number }
+  UploadArsip:     undefined
+  Penilaian:       undefined
   DetailPenilaian: { id: number }
-  Notifikasi:   undefined
-  ManageUser:   undefined
+  Notifikasi:      undefined
+  ManageUser:      undefined
 }
 
 export type TabParams = {
-  Dashboard: undefined
-  Arsip:     undefined
-  Cari:      undefined
-  Profil:    undefined
+  Dashboard:   undefined
+  Arsip:       undefined
+  UploadArsip: undefined
+  Cari:        undefined
+  Profil:      undefined
 }
