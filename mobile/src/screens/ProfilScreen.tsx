@@ -4,10 +4,11 @@
 
 import React, { useState, useEffect } from 'react'
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, Image, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, TextInput, Modal, FlatList, Switch,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import * as ImagePicker from 'expo-image-picker'
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useAuth } from '../hooks/useAuth'
@@ -35,6 +36,7 @@ export default function ProfilScreen() {
   const navigation = useNavigation<Nav>()
   const [loggingOut, setLoggingOut] = useState(false)
   const isSuperAdmin = user?.role === 'super_admin'
+  const [avatarUri, setAvatarUri] = useState<string | null>(null)
 
   // Modals
   const [showChangePassword, setShowChangePassword] = useState(false)
@@ -137,6 +139,23 @@ export default function ProfilScreen() {
     ])
   }
 
+  async function handlePickAvatar() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Izin Diperlukan', 'Izinkan akses galeri untuk mengubah foto profil'); return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    })
+    if (!result.canceled && result.assets[0]) {
+      setAvatarUri(result.assets[0].uri)
+      Alert.alert('Berhasil ✅', 'Foto profil berhasil diperbarui')
+    }
+  }
+
   const canUpload  = user?.role === 'super_admin' || user?.role === 'admin_unit'
   const canAssess  = ['super_admin', 'pimpinan', 'dinas_arsip'].includes(user?.role ?? '')
   const roleColor  = ROLE_COLOR[user?.role ?? ''] ?? COLORS.primary
@@ -146,11 +165,18 @@ export default function ProfilScreen() {
 
       {/* ── HEADER PROFIL ── */}
       <View style={styles.header}>
-        <View style={[styles.avatarRing, { borderColor: roleColor }]}>
-          <View style={[styles.avatarCircle, { backgroundColor: roleColor }]}>
-            <Text style={styles.avatarText}>{user?.namaLengkap?.charAt(0)?.toUpperCase() ?? '?'}</Text>
+        <TouchableOpacity style={[styles.avatarRing, { borderColor: roleColor }]} onPress={handlePickAvatar} activeOpacity={0.8}>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+          ) : (
+            <View style={[styles.avatarCircle, { backgroundColor: roleColor }]}>
+              <Text style={styles.avatarText}>{user?.namaLengkap?.charAt(0)?.toUpperCase() ?? '?'}</Text>
+            </View>
+          )}
+          <View style={styles.avatarEditBadge}>
+            <Ionicons name="camera" size={12} color={COLORS.white} />
           </View>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.nama}>{user?.namaLengkap}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         <View style={[styles.roleBadge, { backgroundColor: roleColor + '33' }]}>
@@ -479,7 +505,9 @@ const styles = StyleSheet.create({
   // Header
   header:         { backgroundColor: COLORS.primaryDark, alignItems: 'center', paddingTop: 56, paddingBottom: SPACING.xl, paddingHorizontal: SPACING.xl },
   avatarRing:     { width: 84, height: 84, borderRadius: 42, borderWidth: 3, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
+  avatarImage:    { width: 72, height: 72, borderRadius: 36 },
   avatarCircle:   { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
+  avatarEditBadge:{ position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: COLORS.primaryDark },
   avatarText:     { color: COLORS.white, fontSize: 28, fontWeight: '800' },
   nama:           { color: COLORS.white, fontSize: 20, fontWeight: '700', textAlign: 'center' },
   email:          { color: COLORS.placeholder, fontSize: 13, marginTop: 2 },

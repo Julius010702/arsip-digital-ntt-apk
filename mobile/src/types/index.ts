@@ -35,29 +35,29 @@ export interface User {
 export type StatusArsip = 'aktif' | 'inaktif' | 'dinamis' | 'dimusnahkan'
 
 export interface Archive {
-  id:                     number
-  nomorSurat:             string
-  judul:                  string
-  tanggalSurat:           string
-  pengirim:               string
-  penerima:               string
-  perihal:                string
-  filePath:               string
-  kategoriId:             number
-  unitId:                 number
-  urusanId:               number | null
-  createdBy:              number
-  createdAt:              string
-  statusArsip:            StatusArsip
-  masaRetensi:            number
-  tanggalMulaiRetensi:    string | null
-  tanggalKadaluarsa:      string | null
-  keteranganInaktif:      string | null
+  id:                      number
+  nomorSurat:              string
+  judul:                   string
+  tanggalSurat:            string
+  pengirim:                string
+  penerima:                string
+  perihal:                 string
+  filePath:                string
+  kategoriId:              number
+  unitId:                  number
+  urusanId:                number | null
+  createdBy:               number
+  createdAt:               string
+  statusArsip:             StatusArsip
+  masaRetensi:             number
+  tanggalMulaiRetensi:     string | null
+  tanggalKadaluarsa:       string | null
+  keteranganInaktif:       string | null
   nomorPeraturanPengganti: string | null
-  category:               Category
-  unit:                   Unit
-  urusan:                 Urusan | null
-  user:                   Pick<User, 'id' | 'namaLengkap' | 'username'>
+  category:                Category
+  unit:                    Unit
+  urusan:                  Urusan | null
+  user:                    Pick<User, 'id' | 'namaLengkap' | 'username'>
 }
 
 export type StatusPenilaian =
@@ -68,16 +68,35 @@ export type StatusPenilaian =
   | 'ditolak'
 
 export interface PenilaianArsip {
-  id:              number
-  archiveId:       number
-  dibuatOleh:      number
-  usulanTindakan:  string
-  alasanUsulan:    string
-  status:          StatusPenilaian
-  tindakanAkhir:   string | null
-  tanggalSelesai:  string | null
-  createdAt:       string
-  archive:         Archive
+  id:             number
+  archiveId:      number
+  dibuatOleh:     number
+  usulanTindakan: string
+  alasanUsulan:   string
+  status:         StatusPenilaian
+  tindakanAkhir:  string | null
+  tanggalSelesai: string | null
+  createdAt:      string
+
+  // Kepala Bagian
+  nilaiKepalaBagian:          string | null
+  catatanKepalaBagian:        string | null
+  disetujuiKepalaBagianId:    number | null
+  tanggalKepalaBagian:        string | null
+
+  // Kepala Biro
+  nilaiKepalaBiro:             string | null
+  catatanKepalaBiro:           string | null
+  disetujuiKepalaBiroId:       number | null
+  tanggalKepalaBiro:           string | null
+
+  // Dinas Arsip
+  keputusanDinas:              string | null
+  catatanDinas:                string | null
+  disetujuiDinasId:            number | null
+  tanggalDinas:                string | null
+
+  archive:          Archive
   pembuatPenilaian: Pick<User, 'id' | 'namaLengkap' | 'role'>
 }
 

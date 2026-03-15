@@ -124,7 +124,7 @@ export default function DetailPenilaianScreen() {
 
         {/* ── STATUS HERO ── */}
         <View style={[s.hero, { backgroundColor: st?.bg ?? COLORS.surface }]}>
-          <View style={[s.heroIconBox, { backgroundColor: st?.color + '22' ?? '#EEE' }]}>
+          <View style={[s.heroIconBox, { backgroundColor: st ? st.color + '22' : '#EEE' }]}>
             <Ionicons
               name={isRejected ? 'close-circle' : isDone ? 'checkmark-circle' : 'time'}
               size={32}
