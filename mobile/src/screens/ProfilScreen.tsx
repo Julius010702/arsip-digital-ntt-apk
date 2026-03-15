@@ -145,7 +145,7 @@ export default function ProfilScreen() {
       Alert.alert('Izin Diperlukan', 'Izinkan akses galeri untuk mengubah foto profil'); return
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'] as any, // ✅ FIXED: kompatibel semua versi
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
