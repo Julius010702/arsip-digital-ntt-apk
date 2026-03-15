@@ -6,6 +6,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Animated, Dimensions,
+  Modal,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as DocumentPicker from 'expo-document-picker'
@@ -18,8 +19,7 @@ import { COLORS, RADIUS, SHADOW, SPACING } from '../utils/theme'
 import { useAuth } from '../hooks/useAuth'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-const BASE  = 'https://arsip-digital-ntt-apk.vercel.app/api'
-const { width } = Dimensions.get('window')
+const BASE = 'https://arsip-digital-ntt-apk.vercel.app/api'
 
 async function uploadFile(file: { name: string; uri: string; mimeType?: string }): Promise<string> {
   const token = await AsyncStorage.getItem('token')
@@ -57,10 +57,9 @@ export default function UploadArsipScreen() {
   const [urusanList, setUrusanList] = useState<Urusan[]>([])
   const [file,       setFile]       = useState<{ name: string; uri: string; mimeType?: string; size?: number } | null>(null)
 
-  // ── Urusan detection state ──
-  const [detectedUrusan,  setDetectedUrusan]  = useState<Urusan | null>(null)
-  const [selectedUrusan,  setSelectedUrusan]  = useState<Urusan | null>(null)
-  const [detectingUrusan, setDetectingUrusan] = useState(false)
+  const [detectedUrusan,   setDetectedUrusan]   = useState<Urusan | null>(null)
+  const [selectedUrusan,   setSelectedUrusan]   = useState<Urusan | null>(null)
+  const [detectingUrusan,  setDetectingUrusan]  = useState(false)
   const [showUrusanPicker, setShowUrusanPicker] = useState(false)
   const [urusanSearch,     setUrusanSearch]     = useState('')
 
@@ -98,7 +97,6 @@ export default function UploadArsipScreen() {
     }).catch((e: any) => console.error(e))
   }, [])
 
-  // ── Auto-detect urusan dari nomor surat, judul, perihal ──
   useEffect(() => {
     if (!nomorSurat && !perihal && !judul) return
     const timer = setTimeout(async () => {
@@ -108,7 +106,6 @@ export default function UploadArsipScreen() {
         if (res.data?.sumber !== 'default' && res.data?.urusan) {
           const found = res.data.urusan as Urusan
           setDetectedUrusan(found)
-          // Auto-select jika belum dipilih manual
           if (!selectedUrusan) setSelectedUrusan(found)
         } else {
           setDetectedUrusan(null)
@@ -118,12 +115,11 @@ export default function UploadArsipScreen() {
     return () => clearTimeout(timer)
   }, [nomorSurat, perihal, judul])
 
-  // Filter urusan list untuk picker
   const filteredUrusan = urusanSearch.trim()
     ? urusanList.filter(u =>
         u.kodeUrusan.toLowerCase().includes(urusanSearch.toLowerCase()) ||
         u.namaUrusan.toLowerCase().includes(urusanSearch.toLowerCase()) ||
-        u.keywords?.some(k => k.toLowerCase().includes(urusanSearch.toLowerCase()))
+        (u.keywords ?? []).some(k => k.toLowerCase().includes(urusanSearch.toLowerCase()))
       )
     : urusanList
 
@@ -169,7 +165,6 @@ export default function UploadArsipScreen() {
     try {
       setUploadStep('Mengupload file ke cloud...')
       const fileUrl = await uploadFile(file!)
-
       setUploadStep('Menyimpan data arsip...')
       await archiveApi.create({
         nomorSurat:   nomorSurat.trim(),
@@ -182,10 +177,8 @@ export default function UploadArsipScreen() {
         unitId,
         masaRetensi:  retensiNum,
         filePath:     fileUrl,
-        // ✅ Kirim urusanId jika sudah dipilih/terdeteksi
         urusanId:     selectedUrusan?.id ?? undefined,
       })
-
       Alert.alert(
         'Berhasil ✅',
         selectedUrusan
@@ -218,8 +211,6 @@ export default function UploadArsipScreen() {
             <Text style={s.headerSub}>Langkah {step + 1} dari {STEPS.length}</Text>
           </View>
         </View>
-
-        {/* Step indicator */}
         <View style={s.stepRow}>
           {STEPS.map((label, i) => (
             <React.Fragment key={i}>
@@ -250,7 +241,6 @@ export default function UploadArsipScreen() {
             <View>
               <Text style={s.stepTitle}>Pilih Dokumen</Text>
               <Text style={s.stepDesc}>Upload file arsip dalam format PDF, DOC, atau DOCX</Text>
-
               {!file ? (
                 <TouchableOpacity style={s.dropZone} onPress={pickFile} activeOpacity={0.85}>
                   <LinearGradient colors={['#EFF6FF', '#DBEAFE']} style={s.dropIconBox}>
@@ -282,14 +272,12 @@ export default function UploadArsipScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-
               {file && (
                 <TouchableOpacity style={s.changeFileBtn} onPress={pickFile}>
                   <Ionicons name="swap-horizontal-outline" size={14} color="#3B82F6" />
                   <Text style={s.changeFileTxt}>Ganti File</Text>
                 </TouchableOpacity>
               )}
-
               <View style={s.tipsCard}>
                 <View style={s.tipsHeader}>
                   <Ionicons name="information-circle" size={16} color="#3B82F6" />
@@ -315,7 +303,6 @@ export default function UploadArsipScreen() {
               <Text style={s.stepTitle}>Informasi Surat</Text>
               <Text style={s.stepDesc}>Isi detail informasi dokumen arsip</Text>
 
-              {/* ── DETEKSI URUSAN ── */}
               {(detectingUrusan || detectedUrusan || selectedUrusan) && (
                 <View style={s.urusanDetectCard}>
                   <View style={s.urusanDetectHeader}>
@@ -336,23 +323,15 @@ export default function UploadArsipScreen() {
                         </>
                       ) : null}
                     </View>
-                    <TouchableOpacity
-                      style={s.urusanChangeBtn}
-                      onPress={() => { setUrusanSearch(''); setShowUrusanPicker(true) }}
-                    >
+                    <TouchableOpacity style={s.urusanChangeBtn} onPress={() => { setUrusanSearch(''); setShowUrusanPicker(true) }}>
                       <Text style={s.urusanChangeTxt}>Ganti</Text>
                     </TouchableOpacity>
                     {selectedUrusan && (
-                      <TouchableOpacity
-                        style={s.urusanClearBtn}
-                        onPress={() => { setSelectedUrusan(null); setDetectedUrusan(null) }}
-                      >
+                      <TouchableOpacity style={s.urusanClearBtn} onPress={() => { setSelectedUrusan(null); setDetectedUrusan(null) }}>
                         <Ionicons name="close" size={14} color="#94A3B8" />
                       </TouchableOpacity>
                     )}
                   </View>
-
-                  {/* Keywords preview */}
                   {(selectedUrusan?.keywords?.length ?? 0) > 0 && (
                     <View style={s.urusanKeywords}>
                       {(selectedUrusan?.keywords ?? []).slice(0, 5).map((k, i) => (
@@ -365,13 +344,8 @@ export default function UploadArsipScreen() {
                 </View>
               )}
 
-              {/* Tombol pilih urusan manual jika belum ada */}
               {!detectingUrusan && !selectedUrusan && (
-                <TouchableOpacity
-                  style={s.pickUrusanBtn}
-                  onPress={() => { setUrusanSearch(''); setShowUrusanPicker(true) }}
-                  activeOpacity={0.8}
-                >
+                <TouchableOpacity style={s.pickUrusanBtn} onPress={() => { setUrusanSearch(''); setShowUrusanPicker(true) }} activeOpacity={0.8}>
                   <Ionicons name="pricetag-outline" size={15} color="#8B5CF6" />
                   <Text style={s.pickUrusanTxt}>Pilih Urusan Manual</Text>
                   <Ionicons name="chevron-forward" size={14} color="#8B5CF6" />
@@ -379,15 +353,14 @@ export default function UploadArsipScreen() {
               )}
 
               <View style={s.formCard}>
-                <FormField label="Nomor Surat"   placeholder="800/BO-NTT/I/2025"      icon="barcode-outline"       value={nomorSurat}   onChange={setNomorSurat}   required hint="Prefix angka menentukan klasifikasi urusan" />
-                <FormField label="Judul Dokumen" placeholder="Judul surat/dokumen"     icon="document-text-outline" value={judul}        onChange={setJudul}        required />
-                <FormField label="Tanggal Surat" placeholder="YYYY-MM-DD"              icon="calendar-outline"      value={tanggalSurat} onChange={setTanggalSurat} required keyboardType="numeric" />
+                <FormField label="Nomor Surat"   placeholder="800/BO-NTT/I/2025"    icon="barcode-outline"       value={nomorSurat}   onChange={setNomorSurat}   required hint="Prefix angka menentukan klasifikasi urusan" />
+                <FormField label="Judul Dokumen" placeholder="Judul surat/dokumen"   icon="document-text-outline" value={judul}        onChange={setJudul}        required />
+                <FormField label="Tanggal Surat" placeholder="YYYY-MM-DD"            icon="calendar-outline"      value={tanggalSurat} onChange={setTanggalSurat} required keyboardType="numeric" />
               </View>
-
               <View style={s.formCard}>
-                <FormField label="Pengirim" placeholder="Nama / instansi pengirim"     icon="person-outline"     value={pengirim} onChange={setPengirim} required />
-                <FormField label="Penerima" placeholder="Nama / instansi penerima"     icon="people-outline"     value={penerima} onChange={setPenerima} required />
-                <FormField label="Perihal"  placeholder="Perihal / topik surat"        icon="chatbubble-outline" value={perihal}  onChange={setPerihal}  required multiline last />
+                <FormField label="Pengirim" placeholder="Nama / instansi pengirim"   icon="person-outline"     value={pengirim} onChange={setPengirim} required />
+                <FormField label="Penerima" placeholder="Nama / instansi penerima"   icon="people-outline"     value={penerima} onChange={setPenerima} required />
+                <FormField label="Perihal"  placeholder="Perihal / topik surat"      icon="chatbubble-outline" value={perihal}  onChange={setPerihal}  required multiline last />
               </View>
             </View>
           )}
@@ -398,14 +371,10 @@ export default function UploadArsipScreen() {
               <Text style={s.stepTitle}>Klasifikasi & Retensi</Text>
               <Text style={s.stepDesc}>Tentukan kategori, unit, dan masa retensi arsip</Text>
 
-              {/* Ringkasan urusan yang dipilih */}
               {selectedUrusan && (
                 <View style={s.urusanSummary}>
                   <View style={s.urusanSummaryLeft}>
-                    <LinearGradient
-                      colors={['#8B5CF6', '#7C3AED']}
-                      style={s.urusanSummaryBadge}
-                    >
+                    <LinearGradient colors={['#8B5CF6', '#7C3AED']} style={s.urusanSummaryBadge}>
                       <Text style={s.urusanSummaryKode}>{selectedUrusan.kodeUrusan}</Text>
                     </LinearGradient>
                     <View style={{ flex: 1 }}>
@@ -419,7 +388,6 @@ export default function UploadArsipScreen() {
                 </View>
               )}
 
-              {/* Masa retensi */}
               <View style={s.classCard}>
                 <View style={s.classCardHeader}>
                   <View style={[s.classCardIcon, { backgroundColor: '#FFF7ED' }]}>
@@ -434,33 +402,18 @@ export default function UploadArsipScreen() {
                     { val: '36', lbl: '3 Thn' }, { val: '60', lbl: '5 Thn' },
                     { val: '84', lbl: '7 Thn' }, { val: '120', lbl: '10 Thn' },
                   ].map(r => (
-                    <TouchableOpacity
-                      key={r.val}
-                      style={[s.retensiChip, masaRetensi === r.val && s.retensiChipActive]}
-                      onPress={() => setMasaRetensi(r.val)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[s.retensiChipTxt, masaRetensi === r.val && s.retensiChipTxtActive]}>
-                        {r.lbl}
-                      </Text>
+                    <TouchableOpacity key={r.val} style={[s.retensiChip, masaRetensi === r.val && s.retensiChipActive]} onPress={() => setMasaRetensi(r.val)} activeOpacity={0.8}>
+                      <Text style={[s.retensiChipTxt, masaRetensi === r.val && s.retensiChipTxtActive]}>{r.lbl}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
                 <View style={s.manualWrap}>
                   <Ionicons name="pencil-outline" size={14} color="#94A3B8" />
-                  <TextInput
-                    style={s.manualInput}
-                    value={masaRetensi}
-                    onChangeText={setMasaRetensi}
-                    placeholder="Isi manual (bulan)"
-                    placeholderTextColor="#94A3B8"
-                    keyboardType="numeric"
-                  />
+                  <TextInput style={s.manualInput} value={masaRetensi} onChangeText={setMasaRetensi} placeholder="Isi manual (bulan)" placeholderTextColor="#94A3B8" keyboardType="numeric" />
                   <Text style={s.manualUnit}>bulan</Text>
                 </View>
               </View>
 
-              {/* Kategori */}
               <View style={s.classCard}>
                 <View style={s.classCardHeader}>
                   <View style={[s.classCardIcon, { backgroundColor: '#EFF6FF' }]}>
@@ -471,12 +424,7 @@ export default function UploadArsipScreen() {
                 </View>
                 <View style={s.pillsWrap}>
                   {categories.map(c => (
-                    <TouchableOpacity
-                      key={c.id}
-                      style={[s.pill, kategoriId === c.id && s.pillActive]}
-                      onPress={() => setKategoriId(c.id)}
-                      activeOpacity={0.8}
-                    >
+                    <TouchableOpacity key={c.id} style={[s.pill, kategoriId === c.id && s.pillActive]} onPress={() => setKategoriId(c.id)} activeOpacity={0.8}>
                       {kategoriId === c.id && <Ionicons name="checkmark-circle" size={12} color="#fff" />}
                       <Text style={[s.pillTxt, kategoriId === c.id && s.pillTxtActive]}>{c.nama}</Text>
                     </TouchableOpacity>
@@ -484,7 +432,6 @@ export default function UploadArsipScreen() {
                 </View>
               </View>
 
-              {/* Unit kerja */}
               <View style={s.classCard}>
                 <View style={s.classCardHeader}>
                   <View style={[s.classCardIcon, { backgroundColor: '#F0FDF4' }]}>
@@ -497,19 +444,12 @@ export default function UploadArsipScreen() {
                   <View style={s.unitLocked}>
                     <Ionicons name="lock-closed" size={14} color="#94A3B8" />
                     <Text style={s.unitLockedTxt}>{units.find(u => u.id === unitId)?.namaUnit ?? 'Unit Anda'}</Text>
-                    <View style={s.unitLockedBadge}>
-                      <Text style={s.unitLockedBadgeTxt}>Terkunci</Text>
-                    </View>
+                    <View style={s.unitLockedBadge}><Text style={s.unitLockedBadgeTxt}>Terkunci</Text></View>
                   </View>
                 ) : (
                   <View style={s.pillsWrap}>
                     {units.map(u => (
-                      <TouchableOpacity
-                        key={u.id}
-                        style={[s.pill, unitId === u.id && s.pillActive]}
-                        onPress={() => setUnitId(u.id)}
-                        activeOpacity={0.8}
-                      >
+                      <TouchableOpacity key={u.id} style={[s.pill, unitId === u.id && s.pillActive]} onPress={() => setUnitId(u.id)} activeOpacity={0.8}>
                         {unitId === u.id && <Ionicons name="checkmark-circle" size={12} color="#fff" />}
                         <Text style={[s.pillTxt, unitId === u.id && s.pillTxtActive]}>{u.namaUnit}</Text>
                       </TouchableOpacity>
@@ -518,23 +458,22 @@ export default function UploadArsipScreen() {
                 )}
               </View>
 
-              {/* Ringkasan sebelum submit */}
               <View style={s.summaryCard}>
                 <View style={s.summaryHeader}>
                   <Ionicons name="checkmark-circle" size={16} color="#10B981" />
                   <Text style={s.summaryTitle}>Ringkasan Upload</Text>
                 </View>
                 {[
-                  { icon: 'document-text-outline', label: 'File',     val: file?.name ?? '—' },
+                  { icon: 'document-text-outline', label: 'File',      val: file?.name ?? '—' },
                   { icon: 'barcode-outline',        label: 'No. Surat', val: nomorSurat || '—' },
                   { icon: 'person-outline',         label: 'Pengirim',  val: pengirim || '—' },
                   { icon: 'pricetag-outline',       label: 'Urusan',    val: selectedUrusan ? `${selectedUrusan.kodeUrusan} — ${selectedUrusan.namaUrusan}` : 'Tidak dipilih' },
                   { icon: 'time-outline',           label: 'Retensi',   val: `${masaRetensi} bulan` },
-                ].map((item, i) => (
-                  <View key={i} style={[s.summaryRow, i === 3 && { borderBottomWidth: 0 }]}>
+                ].map((item, i, arr) => (
+                  <View key={i} style={[s.summaryRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
                     <Ionicons name={item.icon as any} size={13} color={i === 3 && selectedUrusan ? '#8B5CF6' : '#94A3B8'} />
                     <Text style={s.summaryLabel}>{item.label}</Text>
-                    <Text style={[s.summaryVal, i === 3 && selectedUrusan && { color: '#8B5CF6' }]} numberOfLines={1}>{item.val}</Text>
+                    <Text style={[s.summaryVal, i === 3 && selectedUrusan ? { color: '#8B5CF6' } : {}]} numberOfLines={1}>{item.val}</Text>
                   </View>
                 ))}
               </View>
@@ -544,11 +483,18 @@ export default function UploadArsipScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* ══ URUSAN PICKER MODAL ══ */}
-      {showUrusanPicker && (
+      {/* ══ URUSAN PICKER — pakai Modal agar tidak terpotong bottom nav ══ */}
+      <Modal
+        visible={showUrusanPicker}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setShowUrusanPicker(false)}
+      >
         <View style={s.pickerOverlay}>
-          <View style={s.pickerSheet}>
+          <View style={[s.pickerSheet, { paddingBottom: insets.bottom + 8 }]}>
             <View style={s.pickerHandle} />
+
             <View style={s.pickerHeader}>
               <View style={s.pickerHeaderIcon}>
                 <Ionicons name="pricetags" size={16} color="#8B5CF6" />
@@ -559,7 +505,6 @@ export default function UploadArsipScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Search urusan */}
             <View style={s.pickerSearch}>
               <Ionicons name="search-outline" size={15} color="#94A3B8" />
               <TextInput
@@ -577,13 +522,18 @@ export default function UploadArsipScreen() {
               )}
             </View>
 
-            <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+            {/* ✅ ScrollView flex:1 agar scroll penuh tanpa terpotong */}
+            <ScrollView
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {filteredUrusan.length === 0 ? (
                 <View style={s.pickerEmpty}>
                   <Text style={s.pickerEmptyTxt}>Tidak ada urusan ditemukan</Text>
                 </View>
               ) : (
-                filteredUrusan.map((u, i) => {
+                filteredUrusan.map((u) => {
                   const isSelected = selectedUrusan?.id === u.id
                   const isDetected = detectedUrusan?.id === u.id
                   return (
@@ -599,7 +549,7 @@ export default function UploadArsipScreen() {
                         </Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <Text style={[s.pickerItemName, isSelected && { color: '#8B5CF6' }]}>{u.namaUrusan}</Text>
                           {isDetected && (
                             <View style={s.detectedBadge}>
@@ -608,9 +558,9 @@ export default function UploadArsipScreen() {
                             </View>
                           )}
                         </View>
-                        {u.keywords?.length > 0 && (
+                        {(u.keywords?.length ?? 0) > 0 && (
                           <Text style={s.pickerItemKw} numberOfLines={1}>
-                            {u.keywords.slice(0, 4).join(' · ')}
+                            {(u.keywords ?? []).slice(0, 4).join(' · ')}
                           </Text>
                         )}
                       </View>
@@ -619,6 +569,7 @@ export default function UploadArsipScreen() {
                   )
                 })
               )}
+              <View style={{ height: 8 }} />
             </ScrollView>
 
             <TouchableOpacity style={s.pickerClearBtn} onPress={() => { setSelectedUrusan(null); setShowUrusanPicker(false) }}>
@@ -626,7 +577,7 @@ export default function UploadArsipScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      </Modal>
 
       {/* ══ BOTTOM NAV ══ */}
       <View style={[s.bottomNav, { paddingBottom: insets.bottom + 12 }]}>
@@ -638,7 +589,6 @@ export default function UploadArsipScreen() {
         ) : (
           <View style={{ flex: 1 }} />
         )}
-
         {step < STEPS.length - 1 ? (
           <TouchableOpacity style={s.nextBtn} onPress={nextStep} activeOpacity={0.85}>
             <LinearGradient colors={['#3B82F6', '#2563EB']} style={s.nextBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
@@ -647,12 +597,7 @@ export default function UploadArsipScreen() {
             </LinearGradient>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity
-            style={[s.submitBtn, loading && { opacity: 0.7 }]}
-            onPress={handleSubmit}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
+          <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={loading} activeOpacity={0.85}>
             <LinearGradient colors={['#10B981', '#059669']} style={s.nextBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               {loading ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -673,11 +618,7 @@ export default function UploadArsipScreen() {
   )
 }
 
-// ─── FORM COMPONENTS ─────────────────────────────────
-function FormCard({ children }: { children: React.ReactNode }) {
-  return <View style={s.formCard}>{children}</View>
-}
-
+// ─── FORM FIELD ──────────────────────────────────────
 function FormField({ label, placeholder, icon, value, onChange, required, multiline, keyboardType, hint, last }: {
   label: string; placeholder: string; icon: string
   value: string; onChange: (v: string) => void
@@ -714,10 +655,9 @@ const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: '#F1F5F9' },
   scroll: { padding: 16, paddingBottom: 120 },
 
-  // Header
-  header:    { paddingHorizontal: 18, paddingBottom: 20, overflow: 'hidden' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
-  backBtn:   { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  header:     { paddingHorizontal: 18, paddingBottom: 20, overflow: 'hidden' },
+  headerRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  backBtn:    { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
   headerTitle:{ color: '#fff', fontSize: 18, fontWeight: '800' },
   headerSub:  { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 1 },
 
@@ -730,10 +670,9 @@ const s = StyleSheet.create({
   stepLabel:  { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0.3 },
   stepLine:   { flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.15)', marginBottom: 14, marginHorizontal: 4 },
 
-  stepTitle:  { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 4, marginTop: 4 },
-  stepDesc:   { fontSize: 13, color: '#64748B', marginBottom: 16, lineHeight: 18 },
+  stepTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 4, marginTop: 4 },
+  stepDesc:  { fontSize: 13, color: '#64748B', marginBottom: 16, lineHeight: 18 },
 
-  // Drop zone
   dropZone:   { backgroundColor: '#fff', borderRadius: 20, padding: 32, alignItems: 'center', gap: 10, borderWidth: 2, borderStyle: 'dashed', borderColor: '#BFDBFE', marginBottom: 12 },
   dropIconBox:{ width: 72, height: 72, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
   dropTitle:  { fontSize: 15, fontWeight: '700', color: '#1E293B' },
@@ -748,8 +687,8 @@ const s = StyleSheet.create({
   fileExtBadge: { alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   fileExtText:  { fontSize: 10, fontWeight: '800' },
   fileRemoveBtn:{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
-  changeFileBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#EFF6FF', marginBottom: 14 },
-  changeFileTxt: { fontSize: 12, color: '#3B82F6', fontWeight: '700' },
+  changeFileBtn:{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#EFF6FF', marginBottom: 14 },
+  changeFileTxt:{ fontSize: 12, color: '#3B82F6', fontWeight: '700' },
 
   tipsCard:   { backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   tipsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
@@ -758,7 +697,6 @@ const s = StyleSheet.create({
   tipDot:     { width: 5, height: 5, borderRadius: 3, backgroundColor: '#3B82F6' },
   tipTxt:     { fontSize: 12, color: '#64748B', flex: 1, lineHeight: 17 },
 
-  // Urusan detect card
   urusanDetectCard:   { backgroundColor: '#FFFBEB', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#FEF3C7', marginBottom: 12 },
   urusanDetectHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   urusanDetectIcon:   { width: 28, height: 28, borderRadius: 8, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
@@ -771,10 +709,9 @@ const s = StyleSheet.create({
   urusanKwChip:       { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   urusanKwText:       { fontSize: 10, color: '#D97706', fontWeight: '600' },
 
-  pickUrusanBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F5F3FF', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#EDE9FE' },
-  pickUrusanTxt: { flex: 1, fontSize: 13, color: '#8B5CF6', fontWeight: '700' },
+  pickUrusanBtn:{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F5F3FF', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#EDE9FE' },
+  pickUrusanTxt:{ flex: 1, fontSize: 13, color: '#8B5CF6', fontWeight: '700' },
 
-  // Urusan summary (step 2)
   urusanSummary:     { backgroundColor: '#F5F3FF', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#EDE9FE', marginBottom: 12, flexDirection: 'row', alignItems: 'center' },
   urusanSummaryLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   urusanSummaryBadge:{ width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
@@ -782,24 +719,21 @@ const s = StyleSheet.create({
   urusanSummaryName: { fontSize: 13, fontWeight: '700', color: '#4C1D95' },
   urusanSummaryLbl:  { fontSize: 10, color: '#8B5CF6', fontWeight: '600', marginTop: 1 },
 
-  // Form
-  formCard:    { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
-  formField:   { marginBottom: 14 },
-  formLabelRow:{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
-  formLabel:   { fontSize: 12, fontWeight: '700', color: '#475569' },
-  formRequired:{ fontSize: 12, color: '#EF4444', fontWeight: '800' },
-  formHint:    { fontSize: 10, color: '#94A3B8', marginBottom: 5 },
-  formInputWrap:{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#F8FAFC', gap: 8 },
+  formCard:       { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  formField:      { marginBottom: 14 },
+  formLabelRow:   { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
+  formLabel:      { fontSize: 12, fontWeight: '700', color: '#475569' },
+  formRequired:   { fontSize: 12, color: '#EF4444', fontWeight: '800' },
+  formHint:       { fontSize: 10, color: '#94A3B8', marginBottom: 5 },
+  formInputWrap:  { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#F8FAFC', gap: 8 },
   formInputFocused:{ borderColor: '#3B82F6', backgroundColor: '#fff' },
-  formInput:   { flex: 1, height: 44, fontSize: 14, color: '#1E293B' },
+  formInput:      { flex: 1, height: 44, fontSize: 14, color: '#1E293B' },
 
-  // Class card
-  classCard:       { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
-  classCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  classCardIcon:   { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
-  classCardTitle:  { flex: 1, fontSize: 13, fontWeight: '800', color: '#0F172A' },
-  classRequired:   { fontSize: 13, color: '#EF4444', fontWeight: '800' },
-
+  classCard:           { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  classCardHeader:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  classCardIcon:       { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  classCardTitle:      { flex: 1, fontSize: 13, fontWeight: '800', color: '#0F172A' },
+  classRequired:       { fontSize: 13, color: '#EF4444', fontWeight: '800' },
   retensiDesc:         { fontSize: 11, color: '#94A3B8', marginBottom: 12, lineHeight: 16 },
   retensiChips:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   retensiChip:         { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
@@ -810,10 +744,10 @@ const s = StyleSheet.create({
   manualInput: { flex: 1, height: 42, fontSize: 14, color: '#1E293B' },
   manualUnit:  { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
 
-  pillsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pill:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
-  pillActive:{ backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
-  pillTxt:   { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  pillsWrap:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pill:         { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  pillActive:   { backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
+  pillTxt:      { fontSize: 12, fontWeight: '700', color: '#64748B' },
   pillTxtActive:{ color: '#fff' },
 
   unitLocked:        { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#E2E8F0' },
@@ -828,35 +762,34 @@ const s = StyleSheet.create({
   summaryLabel:  { fontSize: 11, color: '#64748B', fontWeight: '600', width: 70 },
   summaryVal:    { flex: 1, fontSize: 12, color: '#1E293B', fontWeight: '700', textAlign: 'right' },
 
-  // Urusan Picker Modal
-  pickerOverlay:  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'flex-end' },
-  pickerSheet:    { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32, maxHeight: '80%' },
-  pickerHandle:   { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 16 },
-  pickerHeader:   { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  // ✅ PICKER MODAL — full height, tidak terpotong
+  pickerOverlay:   { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'flex-end' },
+  pickerSheet:     { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, height: '88%' },
+  pickerHandle:    { width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 16 },
+  pickerHeader:    { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   pickerHeaderIcon:{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center' },
-  pickerTitle:    { flex: 1, fontSize: 16, fontWeight: '800', color: '#1E293B' },
-  pickerClose:    { width: 30, height: 30, borderRadius: 9, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  pickerSearch:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, gap: 8, borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 12 },
+  pickerTitle:     { flex: 1, fontSize: 16, fontWeight: '800', color: '#1E293B' },
+  pickerClose:     { width: 30, height: 30, borderRadius: 9, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  pickerSearch:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, gap: 8, borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 12 },
   pickerSearchInput:{ flex: 1, fontSize: 14, color: '#1E293B' },
-  pickerItem:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+  pickerItem:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
   pickerItemActive:{ backgroundColor: '#F5F3FF', borderRadius: 12, paddingHorizontal: 10 },
-  pickerKodeBadge:{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, minWidth: 48, alignItems: 'center' },
-  pickerKodeTxt:  { fontSize: 12, fontWeight: '900' },
-  pickerItemName: { fontSize: 13, fontWeight: '700', color: '#1E293B' },
-  pickerItemKw:   { fontSize: 10, color: '#94A3B8', marginTop: 2 },
-  detectedBadge:  { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  pickerKodeBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, minWidth: 52, alignItems: 'center' },
+  pickerKodeTxt:   { fontSize: 12, fontWeight: '900' },
+  pickerItemName:  { fontSize: 13, fontWeight: '700', color: '#1E293B' },
+  pickerItemKw:    { fontSize: 10, color: '#94A3B8', marginTop: 2 },
+  detectedBadge:   { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
   detectedBadgeTxt:{ fontSize: 9, color: '#D97706', fontWeight: '700' },
-  pickerEmpty:    { alignItems: 'center', padding: 24 },
-  pickerEmptyTxt: { fontSize: 13, color: '#94A3B8', fontWeight: '600' },
-  pickerClearBtn: { marginTop: 12, alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
-  pickerClearTxt: { fontSize: 13, color: '#94A3B8', fontWeight: '600' },
+  pickerEmpty:     { alignItems: 'center', padding: 32 },
+  pickerEmptyTxt:  { fontSize: 13, color: '#94A3B8', fontWeight: '600' },
+  pickerClearBtn:  { alignItems: 'center', paddingVertical: 14, marginTop: 4, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  pickerClearTxt:  { fontSize: 13, color: '#94A3B8', fontWeight: '600' },
 
-  // Bottom nav
-  bottomNav: { backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
-  prevBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, backgroundColor: '#F1F5F9' },
-  prevTxt:   { fontSize: 14, fontWeight: '700', color: '#64748B' },
-  nextBtn:   { flex: 1, borderRadius: 14, overflow: 'hidden' },
-  nextBtnGrad:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
-  nextTxt:   { fontSize: 14, fontWeight: '700', color: '#fff' },
-  submitBtn: { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  bottomNav:   { backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  prevBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, backgroundColor: '#F1F5F9' },
+  prevTxt:     { fontSize: 14, fontWeight: '700', color: '#64748B' },
+  nextBtn:     { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  nextBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
+  nextTxt:     { fontSize: 14, fontWeight: '700', color: '#fff' },
+  submitBtn:   { flex: 1, borderRadius: 14, overflow: 'hidden' },
 })

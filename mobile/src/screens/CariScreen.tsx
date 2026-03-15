@@ -2,18 +2,18 @@
 // FILE: mobile/src/screens/CariScreen.tsx
 // ======================================================
 
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, TextInput, ActivityIndicator,
-  Animated, Keyboard, Dimensions,
+  Animated, Dimensions,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { archiveApi, urusanApi } from '../services/api'
-import { COLORS, SHADOW, RADIUS, SPACING, STATUS_ARSIP } from '../utils/theme'
+import { COLORS, SHADOW, STATUS_ARSIP } from '../utils/theme'
 import { RootStackParams } from '../navigation/types'
 import { Archive } from '../types'
 
@@ -39,40 +39,52 @@ const TIPS = [
 ]
 
 export default function CariScreen() {
-  const navigation          = useNavigation<Nav>()
-  const inputRef            = useRef<TextInput>(null)
-  const [query, setQuery]   = useState('')
-  const [results, setResults]   = useState<Archive[]>([])
+  const navigation = useNavigation<Nav>()
+  const inputRef   = useRef<TextInput>(null)
+
+  const [query,    setQuery]    = useState('')
+  const [results,  setResults]  = useState<Archive[]>([])
   const [detected, setDetected] = useState<any>(null)
-  const [loading, setLoading]   = useState(false)
+  const [loading,  setLoading]  = useState(false)
   const [searched, setSearched] = useState(false)
-  const fadeAnim  = useState(new Animated.Value(0))[0]
-  const scaleAnim = useState(new Animated.Value(0.95))[0]
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current
+  const scaleAnim = useRef(new Animated.Value(0.95)).current
+
+  // ✅ Auto-search dengan debounce 500ms — ketik langsung cari
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([])
+      setSearched(false)
+      setDetected(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      cari(query)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [query])
 
   const cari = useCallback(async (overrideQuery?: string) => {
     const q = (overrideQuery ?? query).trim()
     if (!q) return
-    Keyboard.dismiss()
     setLoading(true)
     setDetected(null)
     fadeAnim.setValue(0)
     scaleAnim.setValue(0.95)
     try {
-      // ✅ Deteksi urusan dibungkus try-catch terpisah
-      // agar error dari backend tidak menghentikan pencarian
+      // Deteksi urusan — error diabaikan agar tidak menghentikan pencarian
       try {
         const det = await urusanApi.detect(q, q, q)
         if (det.data?.sumber !== 'default') setDetected(det.data)
-      } catch (_) {
-        // abaikan error deteksi urusan, lanjutkan pencarian
-      }
+      } catch (_) { /* abaikan */ }
 
-      // Cari arsip utama
+      // Cari arsip
       const res = await archiveApi.list({ search: q, limit: 20 })
       setResults(res.data?.data ?? res.data ?? [])
       setSearched(true)
       Animated.parallel([
-        Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 350, useNativeDriver: true }),
         Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }),
       ]).start()
     } catch (e) {
@@ -92,7 +104,7 @@ export default function CariScreen() {
 
   function handleQuickSearch(keyword: string) {
     setQuery(keyword)
-    cari(keyword)
+    // useEffect akan trigger otomatis karena query berubah
   }
 
   const renderItem = ({ item }: { item: Archive }) => {
@@ -156,11 +168,16 @@ export default function CariScreen() {
         <View style={styles.headerDec1} />
         <View style={styles.headerDec2} />
         <Text style={styles.headerTitle}>Cari Arsip</Text>
-        <Text style={styles.headerSub}>Temukan arsip dengan cepat & akurat</Text>
+        <Text style={styles.headerSub}>Ketik untuk mencari arsip secara otomatis</Text>
 
+        {/* Search bar */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={18} color="#64748B" />
+            {/* Icon loading atau search */}
+            {loading
+              ? <ActivityIndicator size="small" color="#3B82F6" />
+              : <Ionicons name="search-outline" size={18} color="#64748B" />
+            }
             <TextInput
               ref={inputRef}
               style={styles.searchInput}
@@ -178,6 +195,7 @@ export default function CariScreen() {
               </TouchableOpacity>
             )}
           </View>
+          {/* Tombol search tetap ada untuk trigger manual */}
           <TouchableOpacity style={styles.cariBtn} onPress={() => cari()} activeOpacity={0.85}>
             <LinearGradient colors={['#3B82F6', '#2563EB']} style={styles.cariBtnGrad}>
               <Ionicons name="search" size={18} color="#fff" />
@@ -206,14 +224,6 @@ export default function CariScreen() {
         </View>
       )}
 
-      {/* ══ LOADING ══ */}
-      {loading && (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Mencari arsip...</Text>
-        </View>
-      )}
-
       {/* ══ HASIL PENCARIAN ══ */}
       {!loading && searched && (
         <FlatList
@@ -222,6 +232,7 @@ export default function CariScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View style={styles.resultHeader}>
               <View style={styles.resultCountBox}>
@@ -246,15 +257,25 @@ export default function CariScreen() {
         />
       )}
 
-      {/* ══ PANDUAN ══ */}
+      {/* ══ LOADING STATE ══ */}
+      {loading && (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Mencari arsip...</Text>
+        </View>
+      )}
+
+      {/* ══ PANDUAN (belum search) ══ */}
       {!searched && !loading && (
         <FlatList
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           data={[]}
           keyExtractor={() => ''}
           renderItem={null}
           ListHeaderComponent={
             <View>
+              {/* Quick search chips */}
               <View style={styles.quickSection}>
                 <View style={styles.quickHeader}>
                   <Ionicons name="flash-outline" size={15} color="#F59E0B" />
@@ -277,6 +298,7 @@ export default function CariScreen() {
                 </View>
               </View>
 
+              {/* Tips */}
               <View style={styles.tipsSection}>
                 <View style={styles.tipsHeader}>
                   <Ionicons name="bulb-outline" size={15} color="#8B5CF6" />
@@ -300,21 +322,25 @@ export default function CariScreen() {
   )
 }
 
+// ─── STYLES ──────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
 
+  // Header
   header:     { paddingTop: 56, paddingHorizontal: 20, paddingBottom: 20, overflow: 'hidden' },
   headerDec1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.04)', top: -70, right: -40 },
   headerDec2: { position: 'absolute', width: 120, height: 120, borderRadius: 60,  backgroundColor: 'rgba(255,255,255,0.04)', bottom: -20, left: 40 },
   headerTitle:{ color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
   headerSub:  { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 3, marginBottom: 16 },
 
+  // Search
   searchRow:   { flexDirection: 'row', gap: 10, alignItems: 'center' },
   searchBox:   { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1E293B', fontWeight: '500' },
   cariBtn:     { width: 46, height: 46, borderRadius: 14, overflow: 'hidden' },
   cariBtnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+  // Deteksi urusan
   deteksiBox:        { paddingHorizontal: 16, paddingTop: 12 },
   deteksiInner:      { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#FEF3C7' },
   deteksiIconBox:    { width: 28, height: 28, borderRadius: 8, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
@@ -323,15 +349,18 @@ const styles = StyleSheet.create({
   deteksiKeyword:    { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   deteksiKeywordText:{ fontSize: 11, color: '#D97706', fontWeight: '700' },
 
+  // Loading
   loadingBox:  { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
 
+  // Result list
   list:          { padding: 16, gap: 10, paddingBottom: 32 },
   resultHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   resultCountBox:{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   resultCount:   { fontSize: 12, color: '#15803D', fontWeight: '700' },
   resultQuery:   { fontSize: 12, color: '#94A3B8', fontStyle: 'italic' },
 
+  // Card
   card:        { backgroundColor: '#fff', borderRadius: 18, flexDirection: 'row', alignItems: 'flex-start', padding: 14, gap: 12, ...SHADOW.sm },
   cardDocIcon: { width: 46, height: 46, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   cardBody:    { flex: 1 },
@@ -348,6 +377,7 @@ const styles = StyleSheet.create({
   urusanBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F5F3FF', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
   urusanText:  { fontSize: 10, color: '#8B5CF6', fontWeight: '700' },
 
+  // Empty
   empty:          { alignItems: 'center', paddingTop: 50, gap: 12 },
   emptyIconBox:   { width: 88, height: 88, borderRadius: 44, justifyContent: 'center', alignItems: 'center' },
   emptyTitle:     { fontSize: 16, fontWeight: '800', color: '#1E293B' },
@@ -355,6 +385,7 @@ const styles = StyleSheet.create({
   emptyResetBtn:  { backgroundColor: '#EFF6FF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginTop: 4 },
   emptyResetText: { color: '#3B82F6', fontWeight: '700', fontSize: 13 },
 
+  // Quick searches
   quickSection: { backgroundColor: '#fff', margin: 16, marginBottom: 0, borderRadius: 20, padding: 18, ...SHADOW.sm },
   quickHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   quickTitle:   { fontSize: 14, fontWeight: '800', color: '#1E293B' },
@@ -363,6 +394,7 @@ const styles = StyleSheet.create({
   quickChipIcon:{ width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   quickChipText:{ fontSize: 12, fontWeight: '700' },
 
+  // Tips
   tipsSection: { backgroundColor: '#fff', margin: 16, marginTop: 12, borderRadius: 20, padding: 18, ...SHADOW.sm },
   tipsHeader:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   tipsTitle:   { fontSize: 14, fontWeight: '800', color: '#1E293B' },
