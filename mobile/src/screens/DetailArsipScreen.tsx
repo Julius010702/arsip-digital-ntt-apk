@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, Linking, Modal, TextInput,
 } from 'react-native'
 import * as Sharing from "expo-sharing"
+import * as FileSystem from "expo-file-system/legacy"
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -85,18 +86,22 @@ export default function DetailArsipScreen() {
   async function handleDownload() {
     if (!fileUrl) return
     try {
+      Alert.alert('Mengunduh...', 'File sedang diunduh, harap tunggu...')
+      const fileName2 = fileUrl.split('/').pop()?.split('?')[0] ?? 'dokumen.pdf'
+      const localUri = (FileSystem.cacheDirectory ?? '') + fileName2
+      const result = await FileSystem.downloadAsync(fileUrl, localUri)
       const canShare = await Sharing.isAvailableAsync()
       if (canShare) {
-        await Sharing.shareAsync(fileUrl, {
+        await Sharing.shareAsync(result.uri, {
           mimeType: 'application/pdf',
           dialogTitle: 'Buka atau Simpan File',
           UTI: 'com.adobe.pdf',
         })
       } else {
-        await Linking.openURL(fileUrl)
+        Alert.alert('Berhasil', 'File tersimpan di: ' + result.uri)
       }
     } catch (e: any) {
-      Alert.alert('Gagal', e.message)
+      Alert.alert('Gagal mengunduh', e.message)
     }
   }
 
