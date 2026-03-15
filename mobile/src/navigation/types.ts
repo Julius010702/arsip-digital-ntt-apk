@@ -3,14 +3,15 @@
 // ======================================================
 
 export type RootStackParams = {
-  Login:           undefined
-  MainTab:         undefined
-  DetailArsip:     { id: number }
-  UploadArsip:     undefined
-  Penilaian:       undefined
-  DetailPenilaian: { id: number }
-  Notifikasi:      undefined
-  ManageUser:      undefined
+  Login:            undefined
+  MainTab:          undefined
+  DetailArsip:      { id: number }
+  UploadArsip:      undefined
+  Penilaian:        undefined
+  DetailPenilaian:  { id: number }
+  Notifikasi:       undefined
+  ManageUser:       undefined
+  UrusanManajemen:  undefined  // ✅ BARU
 }
 
 export type TabParams = {

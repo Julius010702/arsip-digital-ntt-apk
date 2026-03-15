@@ -23,6 +23,7 @@ import ProfilScreen          from '../screens/ProfilScreen'
 import NotifikasiScreen      from '../screens/NotifikasiScreen'
 import PenilaianScreen       from '../screens/PenilaianScreen'
 import DetailPenilaianScreen from '../screens/DetailPenilaianScreen'
+import UrusanScreen          from '../screens/UrusanScreen' // ✅ BARU
 
 const Stack = createNativeStackNavigator<RootStackParams>()
 const Tab   = createBottomTabNavigator<TabParams>()
@@ -37,22 +38,22 @@ const HEADER_OPT = {
 type IoniconName = keyof typeof Ionicons.glyphMap
 
 const TAB_CFG: Record<keyof TabParams, { active: IoniconName; inactive: IoniconName; label: string }> = {
-  Dashboard:   { active: 'home',            inactive: 'home-outline',           label: 'Beranda' },
-  Arsip:       { active: 'folder',          inactive: 'folder-outline',         label: 'Arsip'   },
-  UploadArsip: { active: 'cloud-upload',    inactive: 'cloud-upload-outline',   label: 'Upload'  },
-  Cari:        { active: 'search',          inactive: 'search-outline',         label: 'Cari'    },
-  Profil:      { active: 'person',          inactive: 'person-outline',         label: 'Profil'  },
+  Dashboard:   { active: 'home',         inactive: 'home-outline',         label: 'Beranda' },
+  Arsip:       { active: 'folder',       inactive: 'folder-outline',       label: 'Arsip'   },
+  UploadArsip: { active: 'cloud-upload', inactive: 'cloud-upload-outline', label: 'Upload'  },
+  Cari:        { active: 'search',       inactive: 'search-outline',       label: 'Cari'    },
+  Profil:      { active: 'person',       inactive: 'person-outline',       label: 'Profil'  },
 }
 
 function TabNav() {
-  const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const insets    = useSafeAreaInsets()
+  const { user }  = useAuth()
   const canUpload = user?.role === 'super_admin' || user?.role === 'admin_unit'
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => {
-        const cfg = TAB_CFG[route.name as keyof TabParams]
+        const cfg      = TAB_CFG[route.name as keyof TabParams]
         const isUpload = route.name === 'UploadArsip'
         return {
           headerShown: false,
@@ -75,7 +76,7 @@ function TabNav() {
               <Ionicons name={focused ? cfg.active : cfg.inactive} size={size} color={color} />
             )
           ),
-          tabBarLabel: isUpload ? '' : cfg.label,
+          tabBarLabel:           isUpload ? '' : cfg.label,
           tabBarActiveTintColor:   COLORS.primaryLight,
           tabBarInactiveTintColor: COLORS.placeholder,
           tabBarStyle: {
@@ -89,8 +90,8 @@ function TabNav() {
         }
       }}
     >
-      <Tab.Screen name="Dashboard"   component={DashboardScreen} />
-      <Tab.Screen name="Arsip"       component={ArsipScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Arsip"     component={ArsipScreen} />
       {canUpload && (
         <Tab.Screen
           name="UploadArsip"
@@ -122,7 +123,8 @@ export default function AppNavigator() {
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
           <>
-            <Stack.Screen name="MainTab"   component={TabNav} />
+            <Stack.Screen name="MainTab" component={TabNav} />
+
             <Stack.Screen
               name="DetailArsip"
               component={DetailArsipScreen}
@@ -147,6 +149,13 @@ export default function AppNavigator() {
               name="Notifikasi"
               component={NotifikasiScreen}
               options={{ ...HEADER_OPT, headerShown: true, title: 'Notifikasi' }}
+            />
+
+            {/* ✅ BARU: Manajemen Urusan */}
+            <Stack.Screen
+              name="UrusanManajemen"
+              component={UrusanScreen}
+              options={{ ...HEADER_OPT, headerShown: true, title: 'Manajemen Urusan' }}
             />
           </>
         )}

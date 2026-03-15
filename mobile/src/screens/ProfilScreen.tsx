@@ -291,6 +291,21 @@ export default function ProfilScreen() {
             </View>
             <Ionicons name="chevron-forward" size={16} color={COLORS.danger} />
           </TouchableOpacity>
+
+          {/* ✅ BARU: Manajemen Urusan */}
+          <TouchableOpacity
+            style={[styles.menuRow, { borderColor: '#F59E0B30', borderWidth: 1, borderRadius: RADIUS.md, marginTop: 8 }]}
+            onPress={() => navigation.navigate('UrusanManajemen')}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: '#FFFBEB' }]}>
+              <Ionicons name="pricetags" size={18} color="#D97706" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={[styles.menuLabel, { color: '#D97706' }]}>Manajemen Urusan</Text>
+              <Text style={styles.menuSub}>Tambah, edit, hapus kode & nama urusan</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D97706" />
+          </TouchableOpacity>
         </View>
       )}
 
