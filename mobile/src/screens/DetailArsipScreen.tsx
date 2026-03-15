@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   ActivityIndicator, Alert, Modal, TextInput,
 } from 'react-native'
-import { downloadAsync, documentDirectory } from "expo-file-system"
+import * as FileSystem from "expo-file-system"
 import * as Sharing from "expo-sharing"
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
@@ -88,8 +88,8 @@ export default function DetailArsipScreen() {
     try {
       Alert.alert('Mengunduh...', 'File sedang diunduh, harap tunggu...')
       const fileName2 = fileUrl.split('/').pop()?.split('?')[0] ?? 'dokumen.pdf'
-      const destUri = (documentDirectory ?? '') + fileName2
-      const downloadRes = await downloadAsync(fileUrl, destUri)
+      const destUri = (FileSystem.cacheDirectory ?? '') + fileName2
+      const downloadRes = await FileSystem.downloadAsync(fileUrl, destUri)
       const canShare = await Sharing.isAvailableAsync()
       if (canShare) {
         await Sharing.shareAsync(downloadRes.uri, {
