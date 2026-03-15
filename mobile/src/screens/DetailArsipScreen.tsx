@@ -7,6 +7,7 @@ import * as Sharing from "expo-sharing"
 import * as FileSystem from "expo-file-system/legacy"
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
+import { WebView } from 'react-native-webview'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { archiveApi } from '../services/api'
 import { Archive } from '../types'
@@ -26,7 +27,8 @@ export default function DetailArsipScreen() {
 
   const [archive,   setArchive]   = useState<Archive | null>(null)
   const [loading,   setLoading]   = useState(true)
-  const [showEdit,  setShowEdit]  = useState(false)
+  const [showEdit,    setShowEdit]    = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   const [saving,    setSaving]    = useState(false)
 
   // Edit fields
@@ -186,18 +188,18 @@ export default function DetailArsipScreen() {
             <Text style={s.cardTitle}>File Dokumen</Text>
           </View>
           {fileUrl ? (
-            <View style={s.fileBox}>
+            <TouchableOpacity style={s.fileBox} onPress={() => setShowPreview(true)} activeOpacity={0.7}>
               <View style={s.fileIconBox}>
                 <Ionicons name="document" size={28} color="#EF4444" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.fileName} numberOfLines={2}>{fileName}</Text>
-                <Text style={s.fileMeta}>Gunakan tombol "Unduh File" di bawah</Text>
+                <Text style={s.fileMeta}>Ketuk untuk melihat isi dokumen</Text>
               </View>
               <View style={[s.extMini, { backgroundColor: '#FEF2F2' }]}>
                 <Text style={[s.extMiniText, { color: '#EF4444' }]}>{ext}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ) : (
             <View style={s.noFileBox}>
               <Ionicons name="document-outline" size={28} color={COLORS.disabled} />
@@ -230,6 +232,34 @@ export default function DetailArsipScreen() {
           </>
         )}
       </View>
+
+      {/* ══════════════════════════════════════
+          MODAL PREVIEW PDF
+      ══════════════════════════════════════ */}
+      <Modal visible={showPreview} animationType="slide" transparent={false}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <View style={[s.previewHeader, { paddingTop: insets.top + 8 }]}>
+            <TouchableOpacity style={s.previewClose} onPress={() => setShowPreview(false)}>
+              <Ionicons name="close" size={22} color={COLORS.white} />
+            </TouchableOpacity>
+            <Text style={s.previewTitle} numberOfLines={1}>{fileName}</Text>
+            <TouchableOpacity style={s.previewDownload} onPress={handleDownload}>
+              <Ionicons name="download-outline" size={22} color={COLORS.white} />
+            </TouchableOpacity>
+          </View>
+          <WebView
+            source={{ uri: `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true` }}
+            style={{ flex: 1 }}
+            startInLoadingState
+            renderLoading={() => (
+              <View style={s.previewLoading}>
+                <ActivityIndicator size="large" color={COLORS.primaryLight} />
+                <Text style={s.previewLoadingText}>Memuat dokumen...</Text>
+              </View>
+            )}
+          />
+        </View>
+      </Modal>
 
       {/* ══════════════════════════════════════
           MODAL EDIT ARSIP
@@ -352,4 +382,12 @@ const s = StyleSheet.create({
   editField:    { marginBottom: SPACING.md },
   editLabel:    { fontSize: 12, fontWeight: '700', color: COLORS.muted, marginBottom: 6 },
   editInput:    { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: COLORS.text, backgroundColor: '#F8FAFC' },
+
+  // Preview
+  previewHeader:      { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primaryDark, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, gap: 10 },
+  previewClose:       { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  previewTitle:       { flex: 1, color: COLORS.white, fontSize: 13, fontWeight: '600' },
+  previewDownload:    { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  previewLoading:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F1F5F9', gap: 12 },
+  previewLoadingText: { color: COLORS.muted, fontSize: 13 },
 })
