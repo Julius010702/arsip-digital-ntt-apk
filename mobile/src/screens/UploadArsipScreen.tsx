@@ -2,32 +2,30 @@
 // FILE: mobile/src/screens/UploadArsipScreen.tsx
 // ======================================================
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, Alert, ActivityIndicator, Animated, Dimensions,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as DocumentPicker from 'expo-document-picker'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { archiveApi, categoryApi, urusanApi, unitApi } from '../services/api'
 import { Category, Unit, Urusan } from '../types'
 import { COLORS, RADIUS, SHADOW, SPACING } from '../utils/theme'
 import { useAuth } from '../hooks/useAuth'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-const BASE = 'https://arsip-digital-ntt-apk.vercel.app/api'
+const BASE  = 'https://arsip-digital-ntt-apk.vercel.app/api'
+const { width } = Dimensions.get('window')
 
 async function uploadFile(file: { name: string; uri: string; mimeType?: string }): Promise<string> {
   const token = await AsyncStorage.getItem('token')
-  const fd = new FormData()
-  fd.append('file', {
-    uri:  file.uri,
-    name: file.name,
-    type: file.mimeType ?? 'application/pdf',
-  } as any)
-
-  const res = await fetch(`${BASE}/upload`, {
+  const fd    = new FormData()
+  fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType ?? 'application/pdf' } as any)
+  const res  = await fetch(`${BASE}/upload`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: fd,
@@ -37,15 +35,26 @@ async function uploadFile(file: { name: string; uri: string; mimeType?: string }
   return data.data.url
 }
 
+function getFileIcon(name: string): { icon: string; color: string; bg: string } {
+  const ext = name.split('.').pop()?.toLowerCase()
+  if (ext === 'pdf')  return { icon: 'document-text', color: '#EF4444', bg: '#FEF2F2' }
+  if (ext === 'doc' || ext === 'docx') return { icon: 'document', color: '#2563EB', bg: '#DBEAFE' }
+  return { icon: 'attach', color: '#64748B', bg: '#F1F5F9' }
+}
+
+// ─── STEP INDICATOR ──────────────────────────────────
+const STEPS = ['File', 'Info Surat', 'Klasifikasi']
+
 export default function UploadArsipScreen() {
   const { user } = useAuth()
   const nav      = useNavigation()
+  const insets   = useSafeAreaInsets()
 
+  const [step,       setStep]       = useState(0) // 0, 1, 2
   const [loading,    setLoading]    = useState(false)
   const [uploadStep, setUploadStep] = useState('')
   const [categories, setCategories] = useState<Category[]>([])
   const [units,      setUnits]      = useState<Unit[]>([])
-  const [urusanList, setUrusanList] = useState<Urusan[]>([])
   const [file,       setFile]       = useState<{ name: string; uri: string; mimeType?: string; size?: number } | null>(null)
 
   const [detectedUrusan,  setDetectedUrusan]  = useState<Urusan | null>(null)
@@ -61,22 +70,30 @@ export default function UploadArsipScreen() {
   const [unitId,       setUnitId]       = useState<number>(user?.unitId ?? 0)
   const [masaRetensi,  setMasaRetensi]  = useState('60')
 
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const slideAnim = useRef(new Animated.Value(20)).current
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start()
+  }, [step])
+
   useEffect(() => {
     Promise.all([categoryApi.list(), unitApi.list(), urusanApi.list()]).then(([c, u, ur]) => {
       const unitData = Array.isArray(u?.data) ? u.data : Array.isArray(u) ? u : []
       setCategories(c.data ?? [])
       setUnits(unitData)
-      setUrusanList(ur.data ?? [])
       if (!kategoriId && c.data?.length) setKategoriId(c.data[0].id)
       if (user?.unitId) setUnitId(user.unitId)
       else if (unitData.length) setUnitId(unitData[0].id)
-    }).catch((e: any) => console.error('Load data error:', e))
+    }).catch((e: any) => console.error(e))
   }, [])
 
   useEffect(() => {
-    if (!nomorSurat && !judul && !perihal) return
+    if (!nomorSurat && !perihal) return
     const timer = setTimeout(async () => {
-      if (!nomorSurat && !perihal) return
       setDetectingUrusan(true)
       try {
         const res = await urusanApi.detect(nomorSurat, judul, perihal)
@@ -100,30 +117,36 @@ export default function UploadArsipScreen() {
     } catch { Alert.alert('Error', 'Gagal memilih file') }
   }
 
-  async function handleSubmit() {
-    if (!nomorSurat.trim()) { Alert.alert('Peringatan', 'Nomor surat wajib diisi'); return }
-    if (!judul.trim())      { Alert.alert('Peringatan', 'Judul wajib diisi'); return }
-    if (!pengirim.trim())   { Alert.alert('Peringatan', 'Pengirim wajib diisi'); return }
-    if (!penerima.trim())   { Alert.alert('Peringatan', 'Penerima wajib diisi'); return }
-    if (!perihal.trim())    { Alert.alert('Peringatan', 'Perihal wajib diisi'); return }
-    if (!tanggalSurat)      { Alert.alert('Peringatan', 'Tanggal surat wajib diisi'); return }
-    if (!kategoriId)        { Alert.alert('Peringatan', 'Pilih kategori'); return }
-    if (!unitId)            { Alert.alert('Peringatan', 'Pilih unit kerja'); return }
-    if (!file)              { Alert.alert('Peringatan', 'File dokumen wajib diunggah'); return }
-
-    const retensiNum = parseInt(masaRetensi)
-    if (isNaN(retensiNum) || retensiNum < 1) {
-      Alert.alert('Peringatan', 'Masa retensi harus berupa angka (bulan)')
-      return
+  function nextStep() {
+    if (step === 0 && !file) { Alert.alert('Peringatan', 'Pilih file dokumen terlebih dahulu'); return }
+    if (step === 1) {
+      if (!nomorSurat.trim()) { Alert.alert('Peringatan', 'Nomor surat wajib diisi'); return }
+      if (!judul.trim())      { Alert.alert('Peringatan', 'Judul wajib diisi'); return }
+      if (!pengirim.trim())   { Alert.alert('Peringatan', 'Pengirim wajib diisi'); return }
+      if (!penerima.trim())   { Alert.alert('Peringatan', 'Penerima wajib diisi'); return }
+      if (!perihal.trim())    { Alert.alert('Peringatan', 'Perihal wajib diisi'); return }
     }
+    fadeAnim.setValue(0)
+    slideAnim.setValue(20)
+    setStep(s => s + 1)
+  }
+
+  function prevStep() {
+    fadeAnim.setValue(0)
+    slideAnim.setValue(20)
+    setStep(s => s - 1)
+  }
+
+  async function handleSubmit() {
+    if (!kategoriId) { Alert.alert('Peringatan', 'Pilih kategori'); return }
+    if (!unitId)     { Alert.alert('Peringatan', 'Pilih unit kerja'); return }
+    const retensiNum = parseInt(masaRetensi)
+    if (isNaN(retensiNum) || retensiNum < 1) { Alert.alert('Peringatan', 'Masa retensi harus angka'); return }
 
     setLoading(true)
     try {
-      // Step 1: Upload file ke Cloudinary
       setUploadStep('Mengupload file ke cloud...')
-      const fileUrl = await uploadFile(file)
-
-      // Step 2: Simpan data arsip ke database
+      const fileUrl = await uploadFile(file!)
       setUploadStep('Menyimpan data arsip...')
       await archiveApi.create({
         nomorSurat:   nomorSurat.trim(),
@@ -137,7 +160,6 @@ export default function UploadArsipScreen() {
         masaRetensi:  retensiNum,
         filePath:     fileUrl,
       })
-
       Alert.alert('Berhasil ✅', 'Arsip berhasil diunggah ke sistem', [
         { text: 'OK', onPress: () => nav.goBack() },
       ])
@@ -150,182 +172,485 @@ export default function UploadArsipScreen() {
   }
 
   const isAdminUnit = user?.role === 'admin_unit'
+  const fileCfg     = file ? getFileIcon(file.name) : null
 
   return (
     <View style={s.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
-        {/* FILE PICKER */}
-        <TouchableOpacity style={[s.dropZone, file && s.dropActive]} onPress={pickFile}>
-          {file ? (
-            <>
-              <Ionicons name="document" size={32} color={COLORS.primaryLight} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.fileName} numberOfLines={1}>{file.name}</Text>
-                {file.size && <Text style={s.fileSize}>{(file.size / 1024).toFixed(1)} KB</Text>}
-              </View>
-              <TouchableOpacity onPress={() => setFile(null)}>
-                <Ionicons name="close-circle" size={22} color={COLORS.placeholder} />
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <View style={s.dropIcon}>
-                <Ionicons name="cloud-upload-outline" size={32} color={COLORS.primaryLight} />
-              </View>
-              <Text style={s.dropText}>Ketuk untuk pilih file</Text>
-              <Text style={s.dropHint}>PDF / DOC / DOCX — Maks. 10MB</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* DETEKSI URUSAN */}
-        {(detectingUrusan || detectedUrusan) && (
-          <View style={s.urusanBox}>
-            <Ionicons name="flash" size={16} color={COLORS.accent} />
-            {detectingUrusan
-              ? <Text style={s.urusanText}>Mendeteksi urusan...</Text>
-              : <Text style={s.urusanText}>
-                  Urusan terdeteksi: <Text style={s.urusanBold}>{detectedUrusan?.kodeUrusan} — {detectedUrusan?.namaUrusan}</Text>
-                </Text>
-            }
+      {/* ══ HEADER ══ */}
+      <LinearGradient colors={['#0F172A', '#1E3A5F']} style={[s.header, { paddingTop: insets.top + 14 }]}>
+        <View style={s.headerRow}>
+          <TouchableOpacity style={s.backBtn} onPress={() => nav.goBack()} activeOpacity={0.8}>
+            <Ionicons name="arrow-back" size={18} color="#fff" />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerTitle}>Upload Arsip</Text>
+            <Text style={s.headerSub}>Langkah {step + 1} dari {STEPS.length}</Text>
           </View>
+        </View>
+
+        {/* Step indicator */}
+        <View style={s.stepRow}>
+          {STEPS.map((label, i) => (
+            <React.Fragment key={i}>
+              <View style={s.stepItem}>
+                <View style={[s.stepCircle, i < step && s.stepDone, i === step && s.stepActive]}>
+                  {i < step
+                    ? <Ionicons name="checkmark" size={12} color="#fff" />
+                    : <Text style={[s.stepNum, i === step && { color: '#fff' }]}>{i + 1}</Text>
+                  }
+                </View>
+                <Text style={[s.stepLabel, i === step && { color: '#fff' }, i < step && { color: '#34D399' }]}>
+                  {label}
+                </Text>
+              </View>
+              {i < STEPS.length - 1 && (
+                <View style={[s.stepLine, i < step && { backgroundColor: '#34D399' }]} />
+              )}
+            </React.Fragment>
+          ))}
+        </View>
+      </LinearGradient>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+
+          {/* ══ STEP 0: FILE ══ */}
+          {step === 0 && (
+            <View>
+              <Text style={s.stepTitle}>Pilih Dokumen</Text>
+              <Text style={s.stepDesc}>Upload file arsip dalam format PDF, DOC, atau DOCX</Text>
+
+              {!file ? (
+                <TouchableOpacity style={s.dropZone} onPress={pickFile} activeOpacity={0.85}>
+                  <LinearGradient colors={['#EFF6FF', '#DBEAFE']} style={s.dropIconBox}>
+                    <Ionicons name="cloud-upload-outline" size={36} color="#3B82F6" />
+                  </LinearGradient>
+                  <Text style={s.dropTitle}>Ketuk untuk memilih file</Text>
+                  <Text style={s.dropSub}>PDF · DOC · DOCX · Maks. 10MB</Text>
+                  <View style={s.dropBtn}>
+                    <Ionicons name="folder-open-outline" size={14} color="#3B82F6" />
+                    <Text style={s.dropBtnText}>Buka File Manager</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View style={s.fileCard}>
+                  <LinearGradient colors={[fileCfg!.bg, fileCfg!.bg + 'AA']} style={s.fileIconBox}>
+                    <Ionicons name={fileCfg!.icon as any} size={28} color={fileCfg!.color} />
+                  </LinearGradient>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.fileCardName} numberOfLines={2}>{file.name}</Text>
+                    {file.size && (
+                      <Text style={s.fileCardSize}>{(file.size / 1024).toFixed(1)} KB</Text>
+                    )}
+                    <View style={[s.fileExtBadge, { backgroundColor: fileCfg!.bg }]}>
+                      <Text style={[s.fileExtText, { color: fileCfg!.color }]}>
+                        {file.name.split('.').pop()?.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={s.fileRemoveBtn} onPress={() => setFile(null)}>
+                    <Ionicons name="close" size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {file && (
+                <TouchableOpacity style={s.changeFileBtn} onPress={pickFile}>
+                  <Ionicons name="swap-horizontal-outline" size={14} color="#3B82F6" />
+                  <Text style={s.changeFileTxt}>Ganti File</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Tips */}
+              <View style={s.tipsCard}>
+                <View style={s.tipsHeader}>
+                  <Ionicons name="information-circle" size={16} color="#3B82F6" />
+                  <Text style={s.tipsTitle}>Tips Upload</Text>
+                </View>
+                {[
+                  'Pastikan file tidak terpassword/terenkripsi',
+                  'Ukuran file maksimal 10MB',
+                  'Format yang didukung: PDF, DOC, DOCX',
+                ].map((t, i) => (
+                  <View key={i} style={s.tipRow}>
+                    <View style={s.tipDot} />
+                    <Text style={s.tipTxt}>{t}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* ══ STEP 1: INFO SURAT ══ */}
+          {step === 1 && (
+            <View>
+              <Text style={s.stepTitle}>Informasi Surat</Text>
+              <Text style={s.stepDesc}>Isi detail informasi dokumen arsip</Text>
+
+              {/* Deteksi Urusan */}
+              {(detectingUrusan || detectedUrusan) && (
+                <View style={s.deteksiBox}>
+                  <View style={s.deteksiIcon}>
+                    <Ionicons name="flash" size={14} color="#D97706" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {detectingUrusan
+                      ? <Text style={s.deteksiTxt}>Mendeteksi urusan...</Text>
+                      : <>
+                          <Text style={s.deteksiLabel}>Urusan Terdeteksi Otomatis</Text>
+                          <Text style={s.deteksiVal}>{detectedUrusan?.kodeUrusan} — {detectedUrusan?.namaUrusan}</Text>
+                        </>
+                    }
+                  </View>
+                </View>
+              )}
+
+              <FormCard>
+                <FormField label="Nomor Surat" placeholder="800/BO-NTT/I/2025"      icon="barcode-outline"       value={nomorSurat}   onChange={setNomorSurat}   required hint="Prefix angka otomatis terklasifikasi" />
+                <FormField label="Judul Dokumen" placeholder="Judul surat/dokumen"   icon="document-text-outline" value={judul}        onChange={setJudul}        required />
+                <FormField label="Tanggal Surat" placeholder="YYYY-MM-DD"            icon="calendar-outline"      value={tanggalSurat} onChange={setTanggalSurat} required keyboardType="numeric" />
+              </FormCard>
+
+              <FormCard>
+                <FormField label="Pengirim" placeholder="Nama / instansi pengirim"   icon="person-outline"     value={pengirim} onChange={setPengirim} required />
+                <FormField label="Penerima" placeholder="Nama / instansi penerima"   icon="people-outline"     value={penerima} onChange={setPenerima} required />
+                <FormField label="Perihal"  placeholder="Perihal / topik surat"      icon="chatbubble-outline" value={perihal}  onChange={setPerihal}  required multiline last />
+              </FormCard>
+            </View>
+          )}
+
+          {/* ══ STEP 2: KLASIFIKASI ══ */}
+          {step === 2 && (
+            <View>
+              <Text style={s.stepTitle}>Klasifikasi & Retensi</Text>
+              <Text style={s.stepDesc}>Tentukan kategori, unit, dan masa retensi arsip</Text>
+
+              {/* Masa retensi */}
+              <View style={s.classCard}>
+                <View style={s.classCardHeader}>
+                  <View style={[s.classCardIcon, { backgroundColor: '#FFF7ED' }]}>
+                    <Ionicons name="time-outline" size={15} color="#F59E0B" />
+                  </View>
+                  <Text style={s.classCardTitle}>Masa Retensi</Text>
+                </View>
+                <Text style={s.retensiDesc}>Berapa lama arsip aktif sebelum ditinjau ulang</Text>
+                <View style={s.retensiChips}>
+                  {[
+                    { val: '12',  lbl: '1 Thn' },
+                    { val: '24',  lbl: '2 Thn' },
+                    { val: '36',  lbl: '3 Thn' },
+                    { val: '60',  lbl: '5 Thn' },
+                    { val: '84',  lbl: '7 Thn' },
+                    { val: '120', lbl: '10 Thn' },
+                  ].map(r => (
+                    <TouchableOpacity
+                      key={r.val}
+                      style={[s.retensiChip, masaRetensi === r.val && s.retensiChipActive]}
+                      onPress={() => setMasaRetensi(r.val)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[s.retensiChipTxt, masaRetensi === r.val && s.retensiChipTxtActive]}>
+                        {r.lbl}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={s.manualWrap}>
+                  <Ionicons name="pencil-outline" size={14} color="#94A3B8" />
+                  <TextInput
+                    style={s.manualInput}
+                    value={masaRetensi}
+                    onChangeText={setMasaRetensi}
+                    placeholder="Isi manual (bulan)"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                  />
+                  <Text style={s.manualUnit}>bulan</Text>
+                </View>
+              </View>
+
+              {/* Kategori */}
+              <View style={s.classCard}>
+                <View style={s.classCardHeader}>
+                  <View style={[s.classCardIcon, { backgroundColor: '#EFF6FF' }]}>
+                    <Ionicons name="pricetag-outline" size={15} color="#3B82F6" />
+                  </View>
+                  <Text style={s.classCardTitle}>Kategori Arsip</Text>
+                  <Text style={s.classRequired}>*</Text>
+                </View>
+                <View style={s.pillsWrap}>
+                  {categories.map(c => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[s.pill, kategoriId === c.id && s.pillActive]}
+                      onPress={() => setKategoriId(c.id)}
+                      activeOpacity={0.8}
+                    >
+                      {kategoriId === c.id && <Ionicons name="checkmark-circle" size={12} color="#fff" />}
+                      <Text style={[s.pillTxt, kategoriId === c.id && s.pillTxtActive]}>{c.nama}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Unit kerja */}
+              <View style={s.classCard}>
+                <View style={s.classCardHeader}>
+                  <View style={[s.classCardIcon, { backgroundColor: '#F0FDF4' }]}>
+                    <Ionicons name="business-outline" size={15} color="#10B981" />
+                  </View>
+                  <Text style={s.classCardTitle}>Unit Kerja</Text>
+                  <Text style={s.classRequired}>*</Text>
+                </View>
+                {isAdminUnit ? (
+                  <View style={s.unitLocked}>
+                    <Ionicons name="lock-closed" size={14} color="#94A3B8" />
+                    <Text style={s.unitLockedTxt}>{units.find(u => u.id === unitId)?.namaUnit ?? 'Unit Anda'}</Text>
+                    <View style={s.unitLockedBadge}>
+                      <Text style={s.unitLockedBadgeTxt}>Terkunci</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={s.pillsWrap}>
+                    {units.map(u => (
+                      <TouchableOpacity
+                        key={u.id}
+                        style={[s.pill, unitId === u.id && s.pillActive]}
+                        onPress={() => setUnitId(u.id)}
+                        activeOpacity={0.8}
+                      >
+                        {unitId === u.id && <Ionicons name="checkmark-circle" size={12} color="#fff" />}
+                        <Text style={[s.pillTxt, unitId === u.id && s.pillTxtActive]}>{u.namaUnit}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Summary sebelum submit */}
+              <View style={s.summaryCard}>
+                <View style={s.summaryHeader}>
+                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                  <Text style={s.summaryTitle}>Ringkasan Upload</Text>
+                </View>
+                {[
+                  { icon: 'document-text-outline', label: 'File',     val: file?.name ?? '—' },
+                  { icon: 'barcode-outline',        label: 'No. Surat', val: nomorSurat || '—' },
+                  { icon: 'person-outline',         label: 'Pengirim',  val: pengirim || '—' },
+                  { icon: 'time-outline',           label: 'Retensi',   val: `${masaRetensi} bulan` },
+                ].map((item, i) => (
+                  <View key={i} style={s.summaryRow}>
+                    <Ionicons name={item.icon as any} size={13} color="#94A3B8" />
+                    <Text style={s.summaryLabel}>{item.label}</Text>
+                    <Text style={s.summaryVal} numberOfLines={1}>{item.val}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+        </Animated.View>
+      </ScrollView>
+
+      {/* ══ BOTTOM NAV ══ */}
+      <View style={[s.bottomNav, { paddingBottom: insets.bottom + 12 }]}>
+        {step > 0 ? (
+          <TouchableOpacity style={s.prevBtn} onPress={prevStep} activeOpacity={0.8}>
+            <Ionicons name="arrow-back" size={18} color="#64748B" />
+            <Text style={s.prevTxt}>Kembali</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ flex: 1 }} />
         )}
 
-        {/* INFO SURAT */}
-        <View style={s.section}>
-          <Text style={s.secTitle}>Informasi Surat</Text>
-          <Field label="Nomor Surat *"   placeholder="800/BO-NTT/I/2025"         icon="barcode-outline"       value={nomorSurat}   onChangeText={setNomorSurat} hint="Prefix angka otomatis terklasifikasi" />
-          <Field label="Judul Dokumen *" placeholder="Judul surat / dokumen"      icon="document-text-outline" value={judul}        onChangeText={setJudul} />
-          <Field label="Tanggal Surat *" placeholder="YYYY-MM-DD"                 icon="calendar-outline"      value={tanggalSurat} onChangeText={setTanggalSurat} keyboardType="numeric" />
-          <Field label="Pengirim *"      placeholder="Nama / instansi pengirim"   icon="person-outline"        value={pengirim}     onChangeText={setPengirim} />
-          <Field label="Penerima *"      placeholder="Nama / instansi penerima"   icon="people-outline"        value={penerima}     onChangeText={setPenerima} />
-          <Field label="Perihal *"       placeholder="Perihal atau topik surat"   icon="chatbubble-outline"    value={perihal}      onChangeText={setPerihal} multiline />
-        </View>
-
-        {/* RETENSI */}
-        <View style={s.section}>
-          <Text style={s.secTitle}>Masa Retensi</Text>
-          <Text style={s.retensiHint}>Masa retensi adalah berapa lama (bulan) arsip ini aktif sebelum perlu ditinjau ulang.</Text>
-          <View style={s.retensiRow}>
-            {[12, 24, 36, 60, 84, 120].map(m => (
-              <TouchableOpacity key={m} style={[s.retensiChip, masaRetensi === String(m) && s.retensiChipActive]} onPress={() => setMasaRetensi(String(m))}>
-                <Text style={[s.retensiChipText, masaRetensi === String(m) && s.retensiChipTextActive]}>
-                  {m / 12} thn
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Field label="Atau isi manual (bulan)" placeholder="Contoh: 60" icon="time-outline" value={masaRetensi} onChangeText={setMasaRetensi} keyboardType="numeric" />
-        </View>
-
-        {/* KLASIFIKASI */}
-        <View style={s.section}>
-          <Text style={s.secTitle}>Klasifikasi</Text>
-          <Text style={s.label}>Kategori *</Text>
-          <View style={s.pills}>
-            {categories.map(c => (
-              <TouchableOpacity key={c.id} style={[s.pill, kategoriId === c.id && s.pillActive]} onPress={() => setKategoriId(c.id)}>
-                <Text style={[s.pillText, kategoriId === c.id && s.pillTextActive]}>{c.nama}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={[s.label, { marginTop: 16 }]}>Unit Kerja *</Text>
-          {isAdminUnit ? (
-            <View style={s.unitLocked}>
-              <Ionicons name="lock-closed-outline" size={16} color={COLORS.muted} />
-              <Text style={s.unitLockedText}>{units.find(u => u.id === unitId)?.namaUnit ?? 'Unit Anda'}</Text>
-            </View>
-          ) : (
-            <View style={s.pills}>
-              {units.map(u => (
-                <TouchableOpacity key={u.id} style={[s.pill, unitId === u.id && s.pillActive]} onPress={() => setUnitId(u.id)}>
-                  <Text style={[s.pillText, unitId === u.id && s.pillTextActive]}>{u.namaUnit}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* SUBMIT */}
-        <TouchableOpacity style={[s.submitBtn, loading && { opacity: 0.7 }]} onPress={handleSubmit} disabled={loading}>
-          {loading ? (
-            <View style={{ alignItems: 'center', gap: 8 }}>
-              <ActivityIndicator color={COLORS.white} />
-              <Text style={[s.submitText, { fontSize: 13 }]}>{uploadStep}</Text>
-            </View>
-          ) : (
-            <>
-              <Ionicons name="cloud-upload" size={20} color={COLORS.white} />
-              <Text style={s.submitText}>Upload Arsip</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+        {step < STEPS.length - 1 ? (
+          <TouchableOpacity style={s.nextBtn} onPress={nextStep} activeOpacity={0.85}>
+            <LinearGradient colors={['#3B82F6', '#2563EB']} style={s.nextBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              <Text style={s.nextTxt}>Lanjut</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[s.submitBtn, loading && { opacity: 0.7 }]}
+            onPress={handleSubmit}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            <LinearGradient colors={['#10B981', '#059669']} style={s.nextBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              {loading ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={s.nextTxt}>{uploadStep || 'Mengupload...'}</Text>
+                </View>
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload" size={18} color="#fff" />
+                  <Text style={s.nextTxt}>Upload Arsip</Text>
+                </>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   )
 }
 
-function Field({ label, placeholder, icon, value, onChangeText, multiline = false, keyboardType = 'default', hint }: {
+// ─── FORM COMPONENTS ─────────────────────────────────
+function FormCard({ children }: { children: React.ReactNode }) {
+  return <View style={s.formCard}>{children}</View>
+}
+
+function FormField({ label, placeholder, icon, value, onChange, required, multiline, keyboardType, hint, last }: {
   label: string; placeholder: string; icon: string
-  value: string; onChangeText: (v: string) => void
-  multiline?: boolean; keyboardType?: string; hint?: string
+  value: string; onChange: (v: string) => void
+  required?: boolean; multiline?: boolean; keyboardType?: string; hint?: string; last?: boolean
 }) {
+  const [focused, setFocused] = useState(false)
   return (
-    <View style={s.fieldWrap}>
-      <Text style={s.label}>{label}</Text>
-      {hint && <Text style={s.fieldHint}>{hint}</Text>}
-      <View style={[s.inputWrap, multiline && { alignItems: 'flex-start', paddingTop: 12 }]}>
-        <Ionicons name={icon as any} size={17} color={COLORS.placeholder} style={{ marginTop: multiline ? 2 : 0 }} />
+    <View style={[s.formField, last && { marginBottom: 0 }]}>
+      <View style={s.formLabelRow}>
+        <Text style={s.formLabel}>{label}</Text>
+        {required && <Text style={s.formRequired}>*</Text>}
+      </View>
+      {hint && <Text style={s.formHint}>{hint}</Text>}
+      <View style={[s.formInputWrap, focused && s.formInputFocused, multiline && { alignItems: 'flex-start', paddingTop: 12 }]}>
+        <Ionicons name={icon as any} size={15} color={focused ? '#3B82F6' : '#94A3B8'} style={multiline ? { marginTop: 2 } : {}} />
         <TextInput
-          style={[s.input, multiline && { height: 72, textAlignVertical: 'top' }]}
+          style={[s.formInput, multiline && { height: 72, textAlignVertical: 'top' }]}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.placeholder}
+          placeholderTextColor="#CBD5E1"
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={onChange}
           multiline={multiline}
-          keyboardType={keyboardType as any}
+          keyboardType={keyboardType as any ?? 'default'}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
       </View>
     </View>
   )
 }
 
+// ─── STYLES ──────────────────────────────────────────
 const s = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: COLORS.background },
-  scroll: { padding: SPACING.lg },
-  dropZone:   { borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.disabled, borderRadius: RADIUS.lg, padding: 24, alignItems: 'center', backgroundColor: COLORS.surface, marginBottom: SPACING.md, gap: 8 },
-  dropActive: { borderStyle: 'solid', borderColor: COLORS.primaryLight, backgroundColor: COLORS.primarySoft, flexDirection: 'row', gap: 12, alignItems: 'center' },
-  dropIcon:   { width: 60, height: 60, borderRadius: 16, backgroundColor: COLORS.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  dropText:   { fontSize: 14, fontWeight: '700', color: COLORS.muted },
-  dropHint:   { fontSize: 12, color: COLORS.placeholder },
-  fileName:   { fontSize: 14, fontWeight: '700', color: COLORS.text, flex: 1 },
-  fileSize:   { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  urusanBox:  { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.warningSoft, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm },
-  urusanText: { flex: 1, fontSize: 13, color: COLORS.text },
-  urusanBold: { fontWeight: '700', color: COLORS.primary },
-  section:  { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOW.sm },
-  secTitle: { fontSize: 14, fontWeight: '800', color: COLORS.text, marginBottom: 16 },
-  retensiHint:           { fontSize: 12, color: COLORS.muted, marginBottom: SPACING.md, lineHeight: 18 },
-  retensiRow:            { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: SPACING.md },
-  retensiChip:           { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.full, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.surface },
-  retensiChipActive:     { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  retensiChipText:       { fontSize: 12, fontWeight: '700', color: COLORS.muted },
-  retensiChipTextActive: { color: COLORS.white },
-  fieldWrap: { marginBottom: 14 },
-  label:     { fontSize: 12, fontWeight: '700', color: COLORS.text, marginBottom: 7 },
-  fieldHint: { fontSize: 11, color: COLORS.muted, marginBottom: 5 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, paddingHorizontal: 12, gap: 8 },
-  input:     { flex: 1, height: 46, fontSize: 14, color: COLORS.text },
-  pills:          { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pill:           { borderRadius: RADIUS.full, borderWidth: 1.5, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: COLORS.surface },
-  pillActive:     { backgroundColor: COLORS.primaryLight, borderColor: COLORS.primaryLight },
-  pillText:       { fontSize: 12, fontWeight: '700', color: COLORS.muted },
-  pillTextActive: { color: COLORS.white },
-  unitLocked:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
-  unitLockedText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '600' },
-  submitBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primaryLight, borderRadius: RADIUS.lg, paddingVertical: 16, gap: 10, elevation: 8 },
-  submitText: { fontSize: 16, fontWeight: '800', color: COLORS.white },
+  root:   { flex: 1, backgroundColor: '#F1F5F9' },
+  scroll: { padding: 16, paddingBottom: 100 },
+
+  // Header
+  header:    { paddingHorizontal: 18, paddingBottom: 20, overflow: 'hidden' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  backBtn:   { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  headerTitle:{ color: '#fff', fontSize: 18, fontWeight: '800' },
+  headerSub:  { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 1 },
+
+  // Step indicator
+  stepRow:    { flexDirection: 'row', alignItems: 'center' },
+  stepItem:   { alignItems: 'center', gap: 4 },
+  stepCircle: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  stepActive: { backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
+  stepDone:   { backgroundColor: '#10B981', borderColor: '#10B981' },
+  stepNum:    { fontSize: 11, fontWeight: '800', color: 'rgba(255,255,255,0.5)' },
+  stepLabel:  { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0.3 },
+  stepLine:   { flex: 1, height: 2, backgroundColor: 'rgba(255,255,255,0.15)', marginBottom: 14, marginHorizontal: 4 },
+
+  // Step title
+  stepTitle:  { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 4, marginTop: 4 },
+  stepDesc:   { fontSize: 13, color: '#64748B', marginBottom: 16, lineHeight: 18 },
+
+  // Drop zone
+  dropZone:   { backgroundColor: '#fff', borderRadius: 20, padding: 32, alignItems: 'center', gap: 10, borderWidth: 2, borderStyle: 'dashed', borderColor: '#BFDBFE', marginBottom: 12 },
+  dropIconBox:{ width: 72, height: 72, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  dropTitle:  { fontSize: 15, fontWeight: '700', color: '#1E293B' },
+  dropSub:    { fontSize: 12, color: '#94A3B8' },
+  dropBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#EFF6FF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginTop: 6 },
+  dropBtnText:{ fontSize: 12, color: '#3B82F6', fontWeight: '700' },
+
+  // File card
+  fileCard:     { backgroundColor: '#fff', borderRadius: 18, flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12, borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 8 },
+  fileIconBox:  { width: 52, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  fileCardName: { fontSize: 13, fontWeight: '700', color: '#1E293B', marginBottom: 3 },
+  fileCardSize: { fontSize: 11, color: '#94A3B8', marginBottom: 5 },
+  fileExtBadge: { alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  fileExtText:  { fontSize: 10, fontWeight: '800' },
+  fileRemoveBtn:{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
+
+  changeFileBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: '#EFF6FF', marginBottom: 14 },
+  changeFileTxt: { fontSize: 12, color: '#3B82F6', fontWeight: '700' },
+
+  // Tips
+  tipsCard:   { backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#E2E8F0' },
+  tipsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  tipsTitle:  { fontSize: 13, fontWeight: '700', color: '#1E293B' },
+  tipRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  tipDot:     { width: 5, height: 5, borderRadius: 3, backgroundColor: '#3B82F6' },
+  tipTxt:     { fontSize: 12, color: '#64748B', flex: 1, lineHeight: 17 },
+
+  // Deteksi urusan
+  deteksiBox:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFBEB', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#FEF3C7', marginBottom: 12 },
+  deteksiIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
+  deteksiLabel:{ fontSize: 10, color: '#D97706', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  deteksiTxt:  { fontSize: 13, color: '#92400E' },
+  deteksiVal:  { fontSize: 13, color: '#92400E', fontWeight: '700' },
+
+  // Form card
+  formCard:    { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  formField:   { marginBottom: 14 },
+  formLabelRow:{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
+  formLabel:   { fontSize: 12, fontWeight: '700', color: '#475569' },
+  formRequired:{ fontSize: 12, color: '#EF4444', fontWeight: '800' },
+  formHint:    { fontSize: 10, color: '#94A3B8', marginBottom: 5 },
+  formInputWrap:{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#F8FAFC', gap: 8 },
+  formInputFocused:{ borderColor: '#3B82F6', backgroundColor: '#fff' },
+  formInput:   { flex: 1, height: 44, fontSize: 14, color: '#1E293B' },
+
+  // Class card
+  classCard:       { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  classCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  classCardIcon:   { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  classCardTitle:  { flex: 1, fontSize: 13, fontWeight: '800', color: '#0F172A' },
+  classRequired:   { fontSize: 13, color: '#EF4444', fontWeight: '800' },
+
+  // Retensi
+  retensiDesc:     { fontSize: 11, color: '#94A3B8', marginBottom: 12, lineHeight: 16 },
+  retensiChips:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  retensiChip:     { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  retensiChipActive:{ backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
+  retensiChipTxt:  { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  retensiChipTxtActive:{ color: '#fff' },
+  manualWrap:      { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#F8FAFC', gap: 8 },
+  manualInput:     { flex: 1, height: 42, fontSize: 14, color: '#1E293B' },
+  manualUnit:      { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+
+  // Pills
+  pillsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pill:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
+  pillActive:{ backgroundColor: '#3B82F6', borderColor: '#3B82F6' },
+  pillTxt:   { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  pillTxtActive:{ color: '#fff' },
+
+  // Unit locked
+  unitLocked:      { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  unitLockedTxt:   { flex: 1, fontSize: 13, color: '#475569', fontWeight: '600' },
+  unitLockedBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  unitLockedBadgeTxt:{ fontSize: 10, color: '#94A3B8', fontWeight: '700' },
+
+  // Summary
+  summaryCard:   { backgroundColor: '#F0FDF4', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#DCFCE7', marginTop: 4 },
+  summaryHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  summaryTitle:  { fontSize: 13, fontWeight: '700', color: '#15803D' },
+  summaryRow:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: '#DCFCE7' },
+  summaryLabel:  { fontSize: 11, color: '#64748B', fontWeight: '600', width: 70 },
+  summaryVal:    { flex: 1, fontSize: 12, color: '#1E293B', fontWeight: '700', textAlign: 'right' },
+
+  // Bottom nav
+  bottomNav: { backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  prevBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, backgroundColor: '#F1F5F9' },
+  prevTxt:   { fontSize: 14, fontWeight: '700', color: '#64748B' },
+  nextBtn:   { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  nextBtnGrad:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
+  nextTxt:   { fontSize: 14, fontWeight: '700', color: '#fff' },
+  submitBtn: { flex: 1, borderRadius: 14, overflow: 'hidden' },
 })
